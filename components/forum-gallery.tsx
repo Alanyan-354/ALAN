@@ -1,0 +1,4 @@
+'use client';
+import { useState } from 'react';
+import type { ForumImage } from '@/lib/types';
+export function ForumGallery({images,title}:{images:ForumImage[];title:string}){const [active,setActive]=useState(0);return <div className="forum-gallery"><div className="forum-gallery-stage"><img src={images[active]?.url} alt={`${title} — image ${active+1} of ${images.length}`} width={images[active]?.width} height={images[active]?.height}/><span>{active+1} / {images.length}</span></div>{images.length>1&&<div className="forum-thumbnails" role="list" aria-label="Post images">{images.map((image,index)=><button type="button" role="listitem" aria-current={active===index} onClick={()=>setActive(index)} key={image.id}><img src={image.url} alt={`Show image ${index+1}`} width={96} height={96}/></button>)}</div>}</div>;}

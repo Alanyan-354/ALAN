@@ -1,0 +1,37 @@
+export type Role = 'user' | 'moderator' | 'admin';
+export type Status = 'active' | 'archived';
+export interface School { id: string; name: string; slug: string; email_domain: string; city: string; state: string; country: string; status: Status }
+export interface Category { id: string; school_id: string | null; name: string; slug: string; description: string; icon: string; status: Status; sort_order: number; is_discover_default?: boolean; accepts_submissions?: boolean }
+export interface Entity { id: string; school_id: string; category_id: string; parent_entity_id: string | null; name: string; slug: string; short_description: string; description: string; location_name: string; address: string; latitude: number | null; longitude: number | null; official_url: string; source_name: string; source_url: string; last_verified_at: string | null; metadata: Record<string, unknown>; status: Status; is_featured: boolean; created_at: string; image_url?: string | null }
+export interface Dimension { id: string; category_id: string; key: string; label: string; description: string; min_value: number; max_value: number; sort_order: number; is_required: boolean; is_active: boolean }
+export interface Account { id: string; email: string; nickname: string; role: Role; suspended: boolean; verified: boolean; created_at:string; updated_at:string; last_sign_in_at:string|null; review_count:number; response_count:number; submission_count:number }
+export interface Review { id: string; entity_id: string; user_id: string; overall_rating: number | null; body: string; is_anonymous: boolean; status: 'published' | 'hidden'; deleted_at?: string | null; created_at: string; updated_at: string }
+export interface RatingValue { review_id: string; rating_dimension_id: string; score: number }
+export interface PublicReview extends Omit<Review, 'user_id'> { public_identity: string; verified: boolean; values: RatingValue[]; account_id?: string }
+export interface Report { id: string; reporter_user_id: string; target_type: 'review' | 'entity' | 'user' | 'forum_post' | 'forum_comment'; target_id: string; target_author_user_id?: string | null; reason: string; details: string; status: 'pending' | 'resolved'; reviewed_by: string | null; reviewed_at: string | null; created_at: string }
+export interface Audit { id: string; actor_id: string; action: string; target_id: string; created_at: string }
+export type SubmissionStatus = 'pending' | 'approved' | 'rejected';
+export interface EntitySubmission { id:string; school_id:string; category_id:string; name:string; location_name:string; description:string; image_url?:string|null; initial_overall_rating:number; initial_review_body:string; is_anonymous:boolean; status:SubmissionStatus; rejection_reason:string; entity_id:string|null; created_at:string; updated_at:string; submitted_at:string|null; reviewed_at:string|null; account_id?:string; author_email?:string; reviewed_by?:string|null }
+export type QuestionType = 'prediction' | 'poll';
+export type QuestionStatus = 'draft' | 'open' | 'closed' | 'resolved' | 'archived';
+export interface Question { id:string; school_id:string; type:QuestionType; title:string; category:string; status:QuestionStatus; closes_at:string|null; event_at:string|null; resolved_option_id:string|null; show_in_popup:boolean; is_featured:boolean; sort_order:number; created_by:string|null; created_at:string; updated_at:string }
+export interface QuestionOption { id:string; question_id:string; label:string; sort_order:number }
+export interface QuestionResponse { question_id:string; option_id:string; user_id:string; created_at:string; updated_at:string }
+export interface QuestionOptionView extends QuestionOption { response_count:number|null; percentage:number|null }
+export interface QuestionView extends Question { options:QuestionOptionView[]; response_count:number; current_user_option_id:string|null; effective_status:QuestionStatus|'awaiting_result'; results_visible:boolean; can_answer:boolean }
+export type ForumSort = 'hot' | 'latest';
+export type ForumContentStatus = 'draft' | 'published' | 'hidden' | 'deleted';
+export interface ForumEditorialIdentity { id:string; name:string; seeded:boolean; created_at:string }
+export interface ForumPostRecord { id:string; school_id:string; author_user_id:string|null; editorial_identity_id:string|null; title:string; body:string; status:ForumContentStatus; cover_image_id:string|null; created_at:string; updated_at:string; published_at:string|null; deleted_at:string|null }
+export interface ForumImageRecord { id:string; post_id:string; storage_path:string|null; bundled_path:string|null; sort_order:number; width:number; height:number; status:'pending'|'ready'; created_at:string }
+export interface ForumCommentRecord { id:string; post_id:string; parent_comment_id:string|null; author_user_id:string|null; editorial_identity_id:string|null; body:string; status:'published'|'hidden'|'deleted'; created_at:string; updated_at:string; deleted_at:string|null }
+export interface ForumLikeRecord { post_id:string; user_id:string; created_at:string }
+export interface ForumImage { id:string; url:string; width:number; height:number; sort_order:number }
+export interface ForumPostCard { id:string; school_id:string; title:string; cover:ForumImage; author_name:string; created_at:string; like_count:number; comment_count:number; liked_by_viewer:boolean; hot_score:number }
+export interface ForumPostDetail extends ForumPostCard { body:string; images:ForumImage[]; status:'published'|'hidden'; can_interact:boolean; can_delete:boolean }
+export interface ForumCommentNode { id:string; post_id:string; parent_comment_id:string|null; author_name:string; body:string; status:'published'|'hidden'|'deleted'; created_at:string; reply_count:number; can_delete:boolean; replying_to:string|null; replies?:ForumCommentNode[] }
+export interface ForumPage<T> { items:T[]; page:number; page_size:number; has_more:boolean }
+export interface Database { schools: School[]; categories: Category[]; entities: Entity[]; dimensions: Dimension[]; accounts: Account[]; reviews: Review[]; values: RatingValue[]; reports: Report[]; audit: Audit[]; limits: {user_id:string;action:string;at:number}[]; questions:Question[]; question_options:QuestionOption[]; question_responses:QuestionResponse[]; submissions:EntitySubmission[]; forum_editorial_identities:ForumEditorialIdentity[]; forum_posts:ForumPostRecord[]; forum_post_images:ForumImageRecord[]; forum_comments:ForumCommentRecord[]; forum_post_likes:ForumLikeRecord[] }
+export interface Snapshot { schools: School[]; categories: Category[]; entities: Entity[]; dimensions: Dimension[]; reviews: PublicReview[]; own_reviews: PublicReview[]; own_submissions:EntitySubmission[]; admin_submissions:EntitySubmission[]; accounts: Account[]; reports: Report[]; audit: Audit[]; questions:QuestionView[]; viewer: Account | null }
+export type Command = { action: string; data: Record<string, unknown> };
+export interface Aggregate { average: number | null; count: number; reviewCount: number; dimensions: { dimension: Dimension; average: number | null; count: number }[] }

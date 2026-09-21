@@ -1,0 +1,210 @@
+import { z } from 'zod';
+import type { Account, Aggregate, Command, Database, Entity, PublicReview, QuestionView, Snapshot } from './types';
+const uuid = z.uuid();
+const text = (max=200) => z.string().trim().max(max);
+const slug = z.string().trim().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Use lowercase words separated by hyphens.').max(100);
+const status = z.enum(['active','archived']);
+const url = z.union([z.literal(''),z.url().refine(v=>/^https?:\/\//.test(v),'Use an http or https URL.')]);
+const optionalId = z.union([uuid,z.null()]);
+const base = { id: uuid.optional() };
+export const schemas = {
+  school: z.object({...base,name:text().min(1),slug,email_domain:z.string().trim().toLowerCase().regex(/^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/),city:text(),state:text(),country:text(),status}),
+  category: z.object({...base,school_id:optionalId,name:text().min(1),slug,description:text(1000),icon:text(40),status,sort_order:z.number().int().min(0),is_discover_default:z.boolean().default(false),accepts_submissions:z.boolean().default(false)}),
+  dimension: z.object({...base,category_id:uuid,key:slug,label:text().min(1),description:text(1000),min_value:z.literal(1),max_value:z.literal(10),sort_order:z.number().int().min(0),is_required:z.boolean(),is_active:z.boolean()}),
+  entity: z.object({...base,school_id:uuid,category_id:uuid,parent_entity_id:optionalId,name:text().min(1),slug,short_description:text(250),description:text(6000),location_name:text(),address:text(500),latitude:z.number().min(-90).max(90).nullable(),longitude:z.number().min(-180).max(180).nullable(),official_url:url,source_name:text(),source_url:url,last_verified_at:z.iso.datetime().nullable(),metadata:z.record(z.string(),z.unknown()).refine(v=>JSON.stringify(v).length<=12000,'Metadata must be under 12,000 characters.'),status,is_featured:z.boolean()}),
+  review: z.object({entity_id:uuid,overall_rating:z.number().min(1).max(10).multipleOf(0.5).nullable(),body:text(3000),is_anonymous:z.boolean(),values:z.array(z.object({rating_dimension_id:uuid,score:z.number().min(1).max(10).multipleOf(0.5)})).max(50)}),
+  report: z.object({target_type:z.enum(['review','entity','user','forum_post','forum_comment']),target_id:uuid,reason:z.enum(['Harassment','Privacy violation','Hate or threats','Spam','Inaccurate information','Other']),details:text(2000)}),
+  question: z.object({...base,school_id:uuid,type:z.enum(['prediction','poll']),title:text(300).min(1),category:text(80).min(1),status:z.enum(['draft','open','closed','resolved','archived']),closes_at:z.iso.datetime().nullable(),event_at:z.iso.datetime().nullable(),resolved_option_id:optionalId,show_in_popup:z.boolean(),is_featured:z.boolean(),sort_order:z.number().int().min(0),options:z.array(z.object({id:uuid.optional(),label:text(80).min(1),sort_order:z.number().int().min(0)})).min(2).max(4)}),
+  answer: z.object({question_id:uuid,option_id:uuid}),
+};
+export function validateCommand(command:Command):Command {
+  const schema=({save_school:schemas.school,save_category:schemas.category,save_dimension:schemas.dimension,save_entity:schemas.entity,save_review:schemas.review,report:schemas.report,save_question:schemas.question,answer_question:schemas.answer} as Record<string,z.ZodType<Record<string,unknown>>>)[command.action];
+  if(schema)return {action:command.action,data:schema.parse(command.data)};
+  return command;
+}
+export function canContribute(db: Pick<Database,'schools'>, user: Account | null, schoolId: string) {
+  const school=db.schools.find(s=>s.id===schoolId && s.status==='active');
+  return !!school && !!user && user.verified && !user.suspended && user.email.split('@')[1]?.toLowerCase()===school.email_domain.toLowerCase();
+}
+export function publicSnapshot(db: Database, viewer: Account | null): Snapshot {
+  const staff=!!viewer && !viewer.suspended && viewer.role!=='user';
+  const schools=staff?db.schools:db.schools.filter(s=>s.status==='active');
+  const categories=staff?db.categories:db.categories.filter(c=>c.status==='active' && (!c.school_id || schools.some(s=>s.id===c.school_id)));
+  const entities=staff?db.entities:db.entities.filter(e=>e.status==='active' && schools.some(s=>s.id===e.school_id) && categories.some(c=>c.id===e.category_id));
+  const project=(r:Database['reviews'][number], internal=false): PublicReview=>{
+    const {user_id,...rest}=r; const author=db.accounts.find(a=>a.id===user_id);
+    return {...rest,public_identity:r.is_anonymous?'Anonymous Student':author?.nickname || 'Student',verified:author?.verified || false,values:db.values.filter(v=>v.review_id===r.id),...(internal?{account_id:user_id}:{})};
+  };
+  const now=Date.now();
+  const questions=(db.questions||[]).filter(q=>staff || !['draft','archived'].includes(q.status)).filter(q=>schools.some(s=>s.id===q.school_id)).map(q=>questionView(db,viewer,q.id,now,staff)).filter((q):q is QuestionView=>!!q);
+  return {schools,categories,entities,dimensions:db.dimensions.filter(d=>categories.some(c=>c.id===d.category_id)),reviews:db.reviews.filter(r=>!r.deleted_at && (staff || r.status==='published') && entities.some(e=>e.id===r.entity_id)).map(r=>project(r,staff)),own_reviews:db.reviews.filter(r=>!r.deleted_at && r.user_id===viewer?.id).map(r=>project(r)),own_submissions:(db.submissions||[]).filter(s=>s.account_id===viewer?.id),admin_submissions:viewer?.role==='admin'&&!viewer.suspended?(db.submissions||[]):[],accounts:staff?db.accounts:[],reports:staff?db.reports:[],audit:staff?db.audit:[],questions,viewer};
+}
+export function questionView(db:Database,viewer:Account|null,questionId:string,now=Date.now(),staff=!!viewer&&viewer.role!=='user'&&!viewer.suspended):QuestionView|null {
+  const q=(db.questions||[]).find(item=>item.id===questionId);if(!q)return null;
+  const responses=(db.question_responses||[]).filter(r=>r.question_id===q.id);const own=responses.find(r=>r.user_id===viewer?.id);
+  let effective:QuestionView['effective_status']=q.status;
+  if(q.status==='open'&&q.closes_at&&Date.parse(q.closes_at)<=now)effective=q.type==='prediction'&&q.event_at&&Date.parse(q.event_at)<=now?'awaiting_result':'closed';
+  if(q.type==='prediction'&&effective==='closed'&&q.event_at&&Date.parse(q.event_at)<=now)effective='awaiting_result';
+  const resultsVisible=staff||!!own||['closed','resolved','awaiting_result'].includes(effective);
+  const total=responses.length;
+  return {...q,effective_status:effective,response_count:total,current_user_option_id:own?.option_id||null,results_visible:resultsVisible,can_answer:effective==='open'&&canContribute(db,viewer,q.school_id),options:(db.question_options||[]).filter(o=>o.question_id===q.id).sort((a,b)=>a.sort_order-b.sort_order).map(o=>{const count=responses.filter(r=>r.option_id===o.id).length;return {...o,response_count:resultsVisible?count:null,percentage:resultsVisible?(total?Math.round(count/total*100):0):null};})};
+}
+export function aggregate(snapshot: Pick<Snapshot,'reviews'|'dimensions'>, entity: Entity): Aggregate {
+  const reviews=snapshot.reviews.filter(r=>r.entity_id===entity.id && r.status==='published');
+  const mean=(v:number[])=>v.length?v.reduce((a,b)=>a+b,0)/v.length:null;
+  const overall=reviews.flatMap(r=>r.overall_rating===null?[]:[r.overall_rating]);
+  return {average:mean(overall),count:overall.length,reviewCount:reviews.length,dimensions:snapshot.dimensions.filter(d=>d.category_id===entity.category_id && d.is_active).sort((a,b)=>a.sort_order-b.sort_order).map(d=>{const values=reviews.flatMap(r=>r.values.filter(v=>v.rating_dimension_id===d.id).map(v=>v.score));return {dimension:d,average:mean(values),count:values.length};})};
+}
+export type DiscoverySort = 'recommended' | 'highest-rated' | 'most-rated' | 'recently-reviewed';
+export function discoverySort(value?: string): DiscoverySort {
+  if(value==='rating')return 'highest-rated';
+  return ['recommended','highest-rated','most-rated','recently-reviewed'].includes(value||'')?value as DiscoverySort:'recommended';
+}
+export function sortEntitiesForDiscovery(snapshot: Pick<Snapshot,'reviews'|'dimensions'>, entities: Entity[], value?: string) {
+  const sort=discoverySort(value);
+  const facts=new Map(entities.map(entity=>{
+    const ratings=aggregate(snapshot,entity);
+    const latestReview=snapshot.reviews.filter(review=>review.entity_id===entity.id&&review.status==='published').reduce((latest,review)=>Math.max(latest,Date.parse(review.updated_at||review.created_at)),0);
+    return [entity.id,{ratings,latestReview}];
+  }));
+  const compareName=(a:Entity,b:Entity)=>a.name.localeCompare(b.name);
+  return [...entities].sort((a,b)=>{
+    const left=facts.get(a.id)!;const right=facts.get(b.id)!;
+    if(sort==='highest-rated')return (right.ratings.average??-1)-(left.ratings.average??-1)||right.ratings.reviewCount-left.ratings.reviewCount||compareName(a,b);
+    if(sort==='most-rated')return right.ratings.reviewCount-left.ratings.reviewCount||(right.ratings.average??-1)-(left.ratings.average??-1)||compareName(a,b);
+    if(sort==='recently-reviewed')return right.latestReview-left.latestReview||b.created_at.localeCompare(a.created_at)||compareName(a,b);
+    return Number(b.is_featured)-Number(a.is_featured)||right.ratings.reviewCount-left.ratings.reviewCount||(right.ratings.average??-1)-(left.ratings.average??-1)||compareName(a,b);
+  });
+}
+export function applyCommand(db:Database, user:Account|null, command:Command, now=Date.now()): string {
+  if(!user || user.suspended) throw new Error('Sign in with an active account to continue.');
+  const {action,data}=command; const timestamp=new Date(now).toISOString(); const newId=()=>crypto.randomUUID();
+  const requireAdmin=()=>{if(user.role!=='admin')throw new Error('Administrator access required.');};
+  const requireStaff=()=>{if(user.role==='user')throw new Error('Moderator access required.');};
+  const contribute=(entityId:string)=>{const entity=db.entities.find(e=>e.id===entityId && e.status==='active');if(!entity || !db.categories.some(c=>c.id===entity.category_id && c.status==='active') || !canContribute(db,user,entity.school_id))throw new Error('Use a verified email from this school to contribute.');return entity;};
+  const audit=(target:string)=>db.audit.push({id:newId(),actor_id:user.id,action,target_id:target,created_at:timestamp});
+  const limit=(key:string,max:number)=>{db.limits=db.limits.filter(l=>l.at>now-3600000);if(db.limits.filter(l=>l.user_id===user.id && l.action===key).length>=max)throw new Error('Too many requests. Please try again in an hour.');db.limits.push({user_id:user.id,action:key,at:now});};
+  if(action==='save_review'){
+    const d=schemas.review.parse(data); const entity=contribute(d.entity_id); const dimensions=db.dimensions.filter(x=>x.category_id===entity.category_id && x.is_active);
+    if(new Set(d.values.map(v=>v.rating_dimension_id)).size!==d.values.length)throw new Error('Each dimension may be rated only once.');
+    if(d.overall_rating===null && !d.values.length)throw new Error('Add at least one rating.');
+    for(const dim of dimensions)if(dim.is_required && !d.values.some(v=>v.rating_dimension_id===dim.id))throw new Error(`Please rate ${dim.label}.`);
+    for(const value of d.values){const dim=dimensions.find(x=>x.id===value.rating_dimension_id);if(!dim || value.score<dim.min_value || value.score>dim.max_value)throw new Error('A rating is outside its configured range. Refresh the form and try again.');}
+    limit('review',20); let review=db.reviews.find(r=>r.user_id===user.id && r.entity_id===d.entity_id);
+    if(review)Object.assign(review,{overall_rating:d.overall_rating,body:d.body,is_anonymous:d.is_anonymous,updated_at:timestamp,deleted_at:null});
+    else {review={id:newId(),entity_id:d.entity_id,user_id:user.id,overall_rating:d.overall_rating,body:d.body,is_anonymous:d.is_anonymous,status:'published',created_at:timestamp,updated_at:timestamp};db.reviews.push(review);}
+    const inactive=db.values.filter(v=>v.review_id===review.id && !dimensions.some(dim=>dim.id===v.rating_dimension_id));
+    db.values=db.values.filter(v=>v.review_id!==review.id).concat(inactive,d.values.map(v=>({...v,review_id:review.id})));
+    return review.status==='hidden'?'Review saved. It remains hidden pending moderation.':'Your review has been saved.';
+  }
+  if(action==='answer_question'){
+    const d=schemas.answer.parse(data);const question=db.questions.find(q=>q.id===d.question_id);if(!question)throw new Error('Question not found.');
+    const view=questionView(db,user,question.id,now);if(!view?.can_answer)throw new Error(view?.effective_status==='open'?'Use a verified email from this school to answer.':'This question is closed.');
+    if(!db.question_options.some(o=>o.id===d.option_id&&o.question_id===question.id))throw new Error('Choose an option from this question.');
+    limit('question_response',60);let response=db.question_responses.find(r=>r.question_id===question.id&&r.user_id===user.id);
+    if(response){response.option_id=d.option_id;response.updated_at=timestamp;}else db.question_responses.push({question_id:question.id,option_id:d.option_id,user_id:user.id,created_at:timestamp,updated_at:timestamp});
+    return 'Response saved.';
+  }
+  if(action==='delete_review'){
+    const id=uuid.parse(data.id); const review=db.reviews.find(r=>r.id===id && r.user_id===user.id && !r.deleted_at);if(!review)throw new Error('Review not found.');
+    Object.assign(review,{deleted_at:timestamp,body:'',overall_rating:null});db.values=db.values.filter(v=>v.review_id!==id);return 'Review deleted.';
+  }
+  if(action==='forum_toggle_like'){
+    const post=db.forum_posts.find(p=>p.id===uuid.parse(data.id)&&p.status==='published');if(!post)throw new Error('Post not found.');
+    if(!canContribute(db,user,post.school_id))throw new Error('Use a verified email from this school to like posts.');limit('forum_like',120);
+    const index=db.forum_post_likes.findIndex(item=>item.post_id===post.id&&item.user_id===user.id);
+    if(index>=0){db.forum_post_likes.splice(index,1);return 'Like removed.';}db.forum_post_likes.push({post_id:post.id,user_id:user.id,created_at:timestamp});return 'Post liked.';
+  }
+  if(action==='forum_comment'){
+    const post=db.forum_posts.find(p=>p.id===uuid.parse(data.post_id)&&p.status==='published');if(!post)throw new Error('Post not found.');
+    if(!canContribute(db,user,post.school_id))throw new Error('Use a verified email from this school to comment.');limit('forum_comment',30);
+    const parentId=data.parent_comment_id?uuid.parse(data.parent_comment_id):null;if(parentId&&!db.forum_comments.some(c=>c.id===parentId&&c.post_id===post.id))throw new Error('Replies must stay within the same post.');
+    const body=text(1500).min(1).parse(data.body);const id=newId();db.forum_comments.push({id,post_id:post.id,parent_comment_id:parentId,author_user_id:user.id,editorial_identity_id:null,body,status:'published',created_at:timestamp,updated_at:timestamp,deleted_at:null});return id;
+  }
+  if(action==='forum_delete_comment'){
+    const comment=db.forum_comments.find(c=>c.id===uuid.parse(data.id));if(!comment)throw new Error('Comment not found.');if(comment.author_user_id!==user.id&&user.role==='user')throw new Error('You can delete only your own comments.');
+    comment.status='deleted';comment.body='';comment.deleted_at=timestamp;comment.updated_at=timestamp;return 'Comment deleted.';
+  }
+  if(action==='forum_delete_post'){
+    const post=db.forum_posts.find(p=>p.id===uuid.parse(data.id));if(!post)throw new Error('Post not found.');if(post.author_user_id!==user.id&&user.role==='user')throw new Error('You can delete only your own posts.');
+    post.status='deleted';post.deleted_at=timestamp;post.updated_at=timestamp;return 'Post deleted.';
+  }
+  if(action==='save_profile'){const nickname=text(60).min(2).parse(data.nickname);if(/@|https?:\/\//i.test(nickname))throw new Error('Choose a nickname without an email address or URL.');user.nickname=nickname;return 'Profile updated.';}
+  if(action==='report'){
+    const d=schemas.report.parse(data); let entityId=d.target_id;let targetAuthorUserId:string|null=null;
+    if(d.target_type==='review'){const review=db.reviews.find(r=>r.id===d.target_id && r.status==='published' && !r.deleted_at);if(!review)throw new Error('Review not found.');entityId=review.entity_id;}
+    if(d.target_type==='forum_post'){const post=db.forum_posts.find(p=>p.id===d.target_id&&p.status==='published');if(!post)throw new Error('Post not found.');if(!canContribute(db,user,post.school_id))throw new Error('Use a verified email from this school to report content.');targetAuthorUserId=post.author_user_id;entityId='';}
+    if(d.target_type==='forum_comment'){const comment=db.forum_comments.find(c=>c.id===d.target_id&&c.status==='published');const post=db.forum_posts.find(p=>p.id===comment?.post_id&&p.status==='published');if(!comment||!post)throw new Error('Comment not found.');if(!canContribute(db,user,post.school_id))throw new Error('Use a verified email from this school to report content.');targetAuthorUserId=comment.author_user_id;entityId='';}
+    if(d.target_type==='user')throw new Error('Report a review to flag its author for moderator review.');
+    if(entityId)contribute(entityId);limit('report',10);
+    if(db.reports.some(r=>r.reporter_user_id===user.id && r.target_id===d.target_id && r.status==='pending'))throw new Error('You already have an open report for this content.');
+    db.reports.push({...d,id:newId(),reporter_user_id:user.id,target_author_user_id:targetAuthorUserId,status:'pending',reviewed_by:null,reviewed_at:null,created_at:timestamp});return 'Report sent to the moderation team.';
+  }
+  if(action==='moderate_review'){requireStaff();const r=db.reviews.find(r=>r.id===data.id && !r.deleted_at);if(!r)throw new Error('Review not found.');r.status=z.enum(['hidden','published']).parse(data.status);audit(r.id);return 'Review visibility updated.';}
+  if(action==='moderate_forum_post'){requireStaff();const post=db.forum_posts.find(p=>p.id===data.id&&p.status!=='deleted');if(!post)throw new Error('Post not found.');post.status=z.enum(['hidden','published']).parse(data.status);post.updated_at=timestamp;audit(post.id);return 'Post visibility updated.';}
+  if(action==='moderate_forum_comment'){requireStaff();const comment=db.forum_comments.find(c=>c.id===data.id&&c.status!=='deleted');if(!comment)throw new Error('Comment not found.');comment.status=z.enum(['hidden','published']).parse(data.status);comment.updated_at=timestamp;audit(comment.id);return 'Comment visibility updated.';}
+  if(action==='resolve_report'){requireStaff();const r=db.reports.find(r=>r.id===data.id);if(!r)throw new Error('Report not found.');r.status='resolved';r.reviewed_by=user.id;r.reviewed_at=timestamp;audit(r.id);return 'Report resolved.';}
+  if(action==='update_user'){
+    requireStaff();const a=db.accounts.find(a=>a.id===data.id);if(!a)throw new Error('Account not found.');
+    if(a.id===user.id)throw new Error('You cannot change your own role or suspension.');
+    if(user.role!=='admin' && (a.role!=='user' || (data.role && data.role!=='user')))throw new Error('Only admins can manage staff roles.');
+    const role=z.enum(['user','moderator','admin']).parse(data.role);const suspended=z.boolean().parse(data.suspended);
+    if(a.role==='admin' && (role!=='admin'||suspended) && db.accounts.filter(x=>x.role==='admin'&&!x.suspended).length<=1)throw new Error('Keep at least one active administrator.');
+    a.role=role;a.suspended=suspended;audit(a.id);return 'Account updated.';
+  }
+  requireAdmin();
+  if(action==='save_school'){
+    const d=schemas.school.parse(data);if(db.schools.some(s=>s.slug===d.slug && s.id!==d.id))throw new Error('That school slug already exists.');
+    const old=db.schools.find(s=>s.id===d.id);if(d.id&&!old)throw new Error('School not found.');
+    const record={...d,id:d.id||newId()};if(old)Object.assign(old,record);else db.schools.push(record);audit(record.id);return 'School saved.';
+  }
+  if(action==='save_category'){
+    const d=schemas.category.parse(data);if(d.school_id && !db.schools.some(s=>s.id===d.school_id))throw new Error('School not found.');
+    if(db.categories.some(c=>c.slug===d.slug && c.id!==d.id && (c.school_id===d.school_id || !c.school_id || !d.school_id)))throw new Error('That category slug conflicts with a global or school category. Choose a different slug.');
+    if(d.id && d.school_id && db.entities.some(e=>e.category_id===d.id && e.school_id!==d.school_id))throw new Error('This category is used by another school.');
+    const old=db.categories.find(c=>c.id===d.id);if(d.id&&!old)throw new Error('Category not found.');const record={...d,id:d.id||newId()};if(d.is_discover_default)for(const category of db.categories)if(category.school_id===d.school_id)category.is_discover_default=false;if(old)Object.assign(old,record);else db.categories.push(record);audit(record.id);return 'Category saved.';
+  }
+  if(action==='save_dimension'){
+    const d=schemas.dimension.parse({...data,min_value:1,max_value:10});if(!db.categories.some(c=>c.id===d.category_id))throw new Error('Category not found.');
+    if(db.dimensions.some(x=>x.category_id===d.category_id && x.key===d.key && x.id!==d.id))throw new Error('That dimension key already exists.');
+    const old=db.dimensions.find(x=>x.id===d.id);if(d.id&&!old)throw new Error('Dimension not found.');
+    if(old && db.values.some(v=>v.rating_dimension_id===old.id) && (old.min_value!==d.min_value || old.max_value!==d.max_value || old.category_id!==d.category_id))throw new Error('This dimension has ratings. Disable it and create a new dimension to change its scale or category.');
+    const record={...d,id:d.id||newId()};if(old)Object.assign(old,record);else db.dimensions.push(record);audit(record.id);return 'Rating dimension saved.';
+  }
+  if(action==='save_entity'){
+    const d=schemas.entity.parse(data);const category=db.categories.find(c=>c.id===d.category_id);
+    if(!db.schools.some(s=>s.id===d.school_id)||!category || (category.school_id && category.school_id!==d.school_id))throw new Error('Choose a category available at this school.');
+    if(db.entities.some(e=>e.slug===d.slug && e.id!==d.id))throw new Error('That entity slug already exists.');
+    const old=db.entities.find(e=>e.id===d.id);if(d.id&&!old)throw new Error('Entity not found.');
+    if(old && db.reviews.some(r=>r.entity_id===old.id) && (old.category_id!==d.category_id || old.school_id!==d.school_id))throw new Error('An entity with reviews cannot change category or school.');
+    if(d.id && db.entities.some(e=>e.parent_entity_id===d.id && e.school_id!==d.school_id))throw new Error('Child entities must belong to the same school.');
+    let parent=d.parent_entity_id;const visited=new Set<string>(d.id?[d.id]:[]);
+    while(parent){if(visited.has(parent))throw new Error('Parent relationships cannot contain a cycle.');visited.add(parent);const p=db.entities.find(e=>e.id===parent);if(!p||p.school_id!==d.school_id)throw new Error('Parent must be in the same school.');parent=p.parent_entity_id;}
+    const record={...d,id:d.id||newId(),created_at:old?.created_at||timestamp};if(old)Object.assign(old,record);else db.entities.push(record);audit(record.id);return 'Entity saved.';
+  }
+  if(action==='save_question'){
+    const d=schemas.question.parse(data);const old=db.questions.find(q=>q.id===d.id);if(d.id&&!old)throw new Error('Question not found.');
+    if(!db.schools.some(s=>s.id===d.school_id))throw new Error('School not found.');
+    const labels=d.options.map(o=>o.label.toLowerCase());if(new Set(labels).size!==labels.length)throw new Error('Question options must be unique.');
+    if(d.type==='prediction'){
+      if(!d.closes_at||!d.event_at)throw new Error('Predictions need a closing time and event time.');
+      if(Date.parse(d.closes_at)>Date.parse(d.event_at))throw new Error('Closing time must be before or at the event time.');
+      if(!old&&Date.parse(d.closes_at)<=now)throw new Error('Prediction closing time must be in the future.');
+      if(d.status==='resolved'&&Date.parse(d.event_at)>now)throw new Error('A prediction can be resolved only after its event time.');
+      if(d.status==='resolved'&&!d.resolved_option_id)throw new Error('Choose the resolved result before resolving this prediction.');
+      if(d.status!=='resolved'&&d.resolved_option_id)throw new Error('A result can be set only when the prediction is resolved.');
+    } else if(d.event_at||d.resolved_option_id||d.status==='resolved')throw new Error('Student Stats questions do not use event results.');
+    const hasResponses=!!old&&db.question_responses.some(r=>r.question_id===old.id);
+    if(old&&hasResponses&&(old.school_id!==d.school_id||old.type!==d.type||old.title!==d.title))throw new Error('School, type and title are locked after responses arrive.');
+    if(old&&['closed','resolved','archived'].includes(old.status)&&d.status==='open')throw new Error('Closed questions cannot be reopened.');
+    const questionId=d.id||newId();
+    const optionIds=d.options.map(o=>o.id||newId());
+    if(hasResponses){const existing=db.question_options.filter(o=>o.question_id===questionId);if(existing.length!==d.options.length||d.options.some((o,i)=>o.id!==existing.sort((a,b)=>a.sort_order-b.sort_order)[i]?.id||o.label!==existing.sort((a,b)=>a.sort_order-b.sort_order)[i]?.label))throw new Error('Options are locked after responses arrive.');}
+    const resolved=d.resolved_option_id;if(resolved&&!optionIds.includes(resolved))throw new Error('The resolved option must belong to this question.');
+    const record={id:questionId,school_id:d.school_id,type:d.type,title:d.title,category:d.category,status:d.status,closes_at:d.closes_at,event_at:d.event_at,resolved_option_id:resolved,show_in_popup:d.show_in_popup,is_featured:d.is_featured,sort_order:d.sort_order,created_by:old?.created_by||user.id,created_at:old?.created_at||timestamp,updated_at:timestamp};
+    if(old)Object.assign(old,record);else db.questions.push(record);
+    if(!hasResponses){db.question_options=db.question_options.filter(o=>o.question_id!==questionId).concat(d.options.map((o,i)=>({id:optionIds[i],question_id:questionId,label:o.label,sort_order:o.sort_order})));}
+    audit(questionId);return 'Question saved.';
+  }
+  throw new Error('Unknown action.');
+}

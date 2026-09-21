@@ -1,0 +1,4 @@
+# RATEDUKE
+An English-only, mobile-first campus discovery and review application. Students browse configurable resources, verify a school email and leave pseudonymous ratings. Administrators maintain schools, categories, rating dimensions and entities without code changes. P0 includes reports, moderation and user suspension. No hardcoded campus records; optional fictional development seed only. Delivery: local preview and complete Supabase implementation with Vercel instructions. No hosted deployment requested. Demo and Supabase are explicit, isolated adapters.
+
+Confirmed direction: blue and white campus guide, RATEDUKE brand, functional discovery surface first. Audience: students using phones between campus activities; administrators configuring data. Success: empty database works, new dimensions appear immediately, contributions are accountable and public identity stays private. Scope and decisions come from the user-approved implementation plan.

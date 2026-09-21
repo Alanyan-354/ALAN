@@ -1,0 +1,1 @@
+export default function Loading(){return <div className="page-container loading-screen" role="status" aria-label="Loading campus guide"><div className="skeleton skeleton-title"/><div className="skeleton skeleton-search"/><div className="entity-grid">{[1,2,3].map(i=><div key={i} className="skeleton skeleton-card"/>)}</div></div>;}

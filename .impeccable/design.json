@@ -1,0 +1,123 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-15T02:41:20.963Z",
+  "title": "Design System: RATEDUKE",
+  "extensions": {
+    "shadows": [
+      {
+        "name": "search",
+        "value": "0 4px 15px #20305b05",
+        "purpose": "Faint search separation."
+      },
+      {
+        "name": "demo-popover",
+        "value": "0 12px 32px #1726411a",
+        "purpose": "Expanded demo controls."
+      }
+    ],
+    "motion": [
+      {
+        "name": "button",
+        "value": "background .15s,box-shadow .15s",
+        "purpose": "Button states."
+      },
+      {
+        "name": "resource-card",
+        "value": "border-color .18s,transform .18s",
+        "purpose": "Hover border and 3px lift; disabled for reduced motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "mobile-max",
+        "value": "760px"
+      },
+      {
+        "name": "compact-max",
+        "value": "1100px"
+      },
+      {
+        "name": "wide-min",
+        "value": "1500px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Shipped button variant.",
+      "html": "<button class=\"ds-button\">Search</button>",
+      "css": ".ds-button{display:inline-flex;align-items:center;justify-content:center;gap:9px;border-radius:8px;padding:11px 19px;min-height:44px;line-height:1.3;font:700 14px 'Manrope Variable',sans-serif;border:1px solid transparent;cursor:pointer;transition:background .15s,box-shadow .15s}.ds-button:focus-visible{outline:3px solid #2854eb88;outline-offset:4px}@media(prefers-reduced-motion:reduce){.ds-button{transition:none}}.ds-button{background:var(--blue,#2854eb);color:white}.ds-button:hover{background:var(--blue-dark,#1e41bd)}"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "description": "Shipped button variant.",
+      "html": "<button class=\"ds-button\">Share</button>",
+      "css": ".ds-button{display:inline-flex;align-items:center;justify-content:center;gap:9px;border-radius:8px;padding:11px 19px;min-height:44px;line-height:1.3;font:700 14px 'Manrope Variable',sans-serif;border:1px solid transparent;cursor:pointer;transition:background .15s,box-shadow .15s}.ds-button:focus-visible{outline:3px solid #2854eb88;outline-offset:4px}@media(prefers-reduced-motion:reduce){.ds-button{transition:none}}.ds-button{background:white;border-color:var(--line,#e2e7ef);color:var(--ink,#172641)}.ds-button:hover{background:#eef2fa}"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "description": "Shipped button variant.",
+      "html": "<button class=\"ds-button\">Cancel</button>",
+      "css": ".ds-button{display:inline-flex;align-items:center;justify-content:center;gap:9px;border-radius:8px;padding:11px 19px;min-height:44px;line-height:1.3;font:700 14px 'Manrope Variable',sans-serif;border:1px solid transparent;cursor:pointer;transition:background .15s,box-shadow .15s}.ds-button:focus-visible{outline:3px solid #2854eb88;outline-offset:4px}@media(prefers-reduced-motion:reduce){.ds-button{transition:none}}.ds-button{background:transparent;color:var(--ink,#172641)}.ds-button:hover{background:#eef2fa}"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "description": "Shipped button variant.",
+      "html": "<button class=\"ds-button\">Delete</button>",
+      "css": ".ds-button{display:inline-flex;align-items:center;justify-content:center;gap:9px;border-radius:8px;padding:11px 19px;min-height:44px;line-height:1.3;font:700 14px 'Manrope Variable',sans-serif;border:1px solid transparent;cursor:pointer;transition:background .15s,box-shadow .15s}.ds-button:focus-visible{outline:3px solid #2854eb88;outline-offset:4px}@media(prefers-reduced-motion:reduce){.ds-button{transition:none}}.ds-button{background:#fff1f1;color:#a51f36;border-color:#f5ccd4}.ds-button:hover{background:#ffe2e7}"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "description": "Labelled field with readable placeholder and keyboard focus.",
+      "html": "<label class=\"ds-label\">Nickname<input class=\"ds-input\" placeholder=\"Your nickname\"></label>",
+      "css": ".ds-label{display:block;font:650 14px/1.6 'Manrope Variable',sans-serif;color:var(--ink,#172641)}.ds-input{display:block;margin-top:6px;border:1px solid #cbd5e5;border-radius:7px;padding:10px 12px;background:white;color:var(--ink,#172641);font:14px 'Manrope Variable',sans-serif;min-height:44px}.ds-input::placeholder{color:#626f85}.ds-input:focus-visible{outline:3px solid #2854eb88;outline-offset:4px}"
+    },
+    {
+      "name": "Navigation",
+      "kind": "nav",
+      "description": "Desktop campus navigation.",
+      "html": "<nav class=\"ds-nav\"><a href=\"#discover\">Discover</a><a href=\"#explore\">Explore campus</a></nav>",
+      "css": ".ds-nav{display:flex;gap:32px;background:white;font:650 14px 'Manrope Variable',sans-serif}.ds-nav a{color:#637088;text-decoration:none}.ds-nav a:hover{color:var(--blue,#2854eb)}.ds-nav a:focus-visible{outline:3px solid #2854eb88;outline-offset:4px}"
+    },
+    {
+      "name": "Dimension Chip",
+      "kind": "chip",
+      "description": "Configured rating label and score; sample content only.",
+      "html": "<span class=\"ds-chip\">Dimension <b>4/5</b></span>",
+      "css": ".ds-chip{display:inline-block;font:12px 'Manrope Variable',sans-serif;color:#5b6982;background:#f5f7fa;padding:4px 7px;border-radius:4px}.ds-chip b{margin-left:3px}"
+    },
+    {
+      "name": "Review Card",
+      "kind": "card",
+      "description": "Bordered review surface; public identity and sample text.",
+      "html": "<article class=\"ds-card\"><strong>Anonymous Student</strong><p>Rating only</p></article>",
+      "css": ".ds-card{background:white;border:1px solid var(--line,#e2e7ef);padding:21px;border-radius:var(--radius,14px);color:var(--ink,#172641);font:16px/1.6 'Manrope Variable',sans-serif}.ds-card strong{font-size:14px;font-weight:750}.ds-card p{color:var(--muted,#62708a)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Blue and white campus guide",
+    "overview": "Mode: Operate. This records the user-approved, code-led implementation; no raster composition is the design authority. Clear English, visible search, and readable resource and review content serve students on phones and administrators configuring campus information.",
+    "keyCharacteristics": [
+      "Navy headings, royal-blue actions, white surfaces, and a pale blue-gray canvas.",
+      "Manrope variable typography and consistent outline icons.",
+      "Data-driven category treatments and responsive stacked content."
+    ],
+    "rules": [],
+    "dos": [
+      "Do preserve the English-only campus-guide direction and component hierarchy.",
+      "Do retain visible focus, readable contrast, reduced-motion behavior, and responsive content order.",
+      "Do derive category names, icons, entities, and rating dimensions from configured data."
+    ],
+    "donts": [
+      "Don't introduce stock or invented campus photography into the icon-led system.",
+      "Don't turn the Fictional demo strip into a fixed overlay or display demo controls in production."
+    ]
+  }
+}

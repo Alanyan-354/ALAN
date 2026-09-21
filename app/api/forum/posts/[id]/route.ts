@@ -1,0 +1,3 @@
+import { cancelForumPost } from '@/lib/repository';
+export const runtime='nodejs';
+export async function DELETE(request:Request,{params}:{params:Promise<{id:string}>}){const origin=request.headers.get('origin'),host=request.headers.get('x-forwarded-host')||request.headers.get('host');if(origin&&host&&new URL(origin).host!==host)return Response.json({ok:false,message:'Invalid request origin.'},{status:403});try{await cancelForumPost((await params).id);return Response.json({ok:true});}catch(error){return Response.json({ok:false,message:error instanceof Error?error.message:'Unable to cancel this draft.'},{status:400});}}

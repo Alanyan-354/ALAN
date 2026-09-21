@@ -1,0 +1,2 @@
+import { getForumComments } from '@/lib/repository';
+export async function GET(request:Request){const url=new URL(request.url);const post=url.searchParams.get('post');if(!post)return Response.json({ok:false,message:'Post is required.'},{status:400});try{return Response.json(await getForumComments(post,url.searchParams.get('parent'),Number(url.searchParams.get('page')||1),Number(url.searchParams.get('limit')||20)));}catch(error){return Response.json({ok:false,message:error instanceof Error?error.message:'Unable to load comments.'},{status:400});}}
