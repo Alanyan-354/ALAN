@@ -1,2 +1,12 @@
 'use client';
-export default function ErrorPage({reset}:{reset:()=>void}){return <div className="configuration-screen"><h1>Something interrupted your visit.</h1><p>We couldn’t load this page. Please try again.</p><button className="button button-primary" onClick={reset}>Try again</button></div>;}
+import { RefreshCw, WifiOff } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+
+export default function ErrorPage({reset}:{reset:()=>void}) {
+  return <main className="configuration-screen" aria-labelledby="error-title">
+    <span className="empty-icon"><WifiOff size={26} aria-hidden="true"/></span>
+    <h1 id="error-title">Something interrupted your visit.</h1>
+    <p>We couldn’t load this page. Please try again.</p>
+    <Button onClick={reset}><RefreshCw size={16} aria-hidden="true"/>Try again</Button>
+  </main>;
+}

@@ -10,7 +10,7 @@ import { resetDemo } from '@/lib/demo-store';
 import { demoIdentities } from '@/supabase/seed/demo';
 import { supabase } from '@/lib/supabase';
 import { otpFailure, signInFailure } from '@/lib/auth';
-export interface FormState { ok: boolean; message: string; retryAfterSeconds?: number }
+export interface FormState { ok: boolean; message: string; retryAfterSeconds?: number; redirectTo?:string }
 const numbers=['overall_rating','min_value','max_value','sort_order','latitude','longitude'];
 const nullable=['school_id','parent_entity_id','overall_rating','latitude','longitude','last_verified_at','closes_at','event_at','resolved_option_id'];
 export async function submitAction(_previous:FormState,form:FormData):Promise<FormState>{
@@ -21,6 +21,7 @@ export async function submitAction(_previous:FormState,form:FormData):Promise<Fo
     }
     if(!data.id)delete data.id;
     if(action==='save_review'){data.is_anonymous=form.has('is_anonymous');data.values=Array.from(form.entries()).filter(([key,value])=>key.startsWith('rating:')&&value!=='').map(([key,value])=>({rating_dimension_id:key.slice(7),score:Number(value)}));}
+    if(action==='save_managed_review'){data.publish=form.get('intent')==='publish';data.overall_rating=form.get('overall_rating')?Number(form.get('overall_rating')):null;data.values=Array.from(form.entries()).filter(([key,value])=>key.startsWith('rating:')&&value!=='').map(([key,value])=>({rating_dimension_id:key.slice(7),score:Number(value)}));}
     if(action==='save_category'){data.is_discover_default=form.has('is_discover_default');data.accepts_submissions=form.has('accepts_submissions');}
     if(action==='save_dimension'){data.is_active=form.has('is_active');data.is_required=form.has('is_required');data.min_value=1;data.max_value=10;}
     if(action==='save_entity'){data.is_featured=form.has('is_featured');try{data.metadata=JSON.parse(String(form.get('metadata')||'{}'));}catch{throw new Error('Metadata must be a valid JSON object.');}if(data.last_verified_at)data.last_verified_at=new Date(String(data.last_verified_at)).toISOString();}
@@ -33,8 +34,8 @@ export async function submitAction(_previous:FormState,form:FormData):Promise<Fo
     if(action==='demo_identity'){
       if(dataMode()!=='demo')throw new Error('Demo identities are unavailable.');
       const identity=String(data.identity);const store=await cookies();
-      if(identity==='guest')store.delete('rateduke-demo-user');else{const id=demoIdentities[identity as keyof typeof demoIdentities];if(!id)throw new Error('Invalid demo identity.');store.set('rateduke-demo-user',id,{httpOnly:true,sameSite:'strict',path:'/'});}
-      revalidatePath('/','layout');return {ok:true,message:'Demo identity updated.'};
+      const id=demoIdentities[identity as keyof typeof demoIdentities];if(!id)throw new Error('Invalid demo identity.');store.set('rateduke-demo-user',id,{httpOnly:true,sameSite:'strict',path:'/'});
+      revalidatePath('/','layout');return {ok:true,message:'Signed in.',redirectTo:identity==='admin'?'/admin':'/discover?school=duke-university'};
     }
     if(action==='demo_reset'){
       if(dataMode()!=='demo')throw new Error('Demo tools are unavailable.');
@@ -46,7 +47,7 @@ export async function submitAction(_previous:FormState,form:FormData):Promise<Fo
       const domain=email.slice(email.lastIndexOf('@')+1);const snapshot=await getSnapshot();
       if(!snapshot.schools.some(s=>s.status==='active'&&s.email_domain.toLowerCase()===domain))throw new Error('Use an email address from a supported school.');
       const origin=process.env.NEXT_PUBLIC_SITE_URL;if(!origin)throw new Error('The login callback URL has not been configured.');
-      let callback:string;try{callback=new URL('/auth/callback',origin).toString();}catch{throw new Error('The login callback URL is invalid.');}
+      let callback:string;try{const target=new URL('/auth/callback',origin);if(data.portal==='admin')target.searchParams.set('portal','admin');callback=target.toString();}catch{throw new Error('The login callback URL is invalid.');}
       const {error}=await (await supabase()).auth.signInWithOtp({email,options:{emailRedirectTo:callback,shouldCreateUser:true}});
       if(error)return {ok:false,...signInFailure(error)};
       return {ok:true,message:'Check your inbox. Use the newest sign-in link within one hour.',retryAfterSeconds:60};
@@ -58,7 +59,7 @@ export async function submitAction(_previous:FormState,form:FormData):Promise<Fo
       if(!/^\d{6}$/.test(token))throw new Error('Enter the six-digit code from the newest email.');
       const {error}=await (await supabase()).auth.verifyOtp({email,token,type:'email'});
       if(error)return {ok:false,message:otpFailure(error)};
-      revalidatePath('/','layout');return {ok:true,message:'Signed in successfully. Open your account to continue.'};
+      revalidatePath('/','layout');const snapshot=await getSnapshot();if(data.portal==='admin'&&snapshot.viewer?.role!=='admin'){await(await supabase()).auth.signOut();return {ok:false,message:'This account does not have administrator access.'};}return {ok:true,message:'Signed in successfully.',redirectTo:data.portal==='admin'?'/admin':'/profile'};
     }
     const message=await execute({action,data});revalidatePath('/','layout');return {ok:true,message};
   }catch(e){return {ok:false,message:e instanceof ZodError?e.issues.map(i=>`${i.path.join('.') || 'Input'}: ${i.message}`).join(' '):e instanceof Error?e.message:'Something went wrong. Please try again.'};}

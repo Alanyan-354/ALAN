@@ -1,0 +1,31 @@
+.browse { padding-top: var(--space-8); }
+.heading { display: grid; grid-template-columns: minmax(0,1fr) minmax(280px,420px); gap: var(--space-8); align-items: center; margin-bottom: var(--space-6); }
+.intro h1 { margin: 10px 0 8px; }
+.intro p { color: var(--muted); font-size: var(--text-sm); max-width: 58ch; }
+.heading :global(.campus-search) { margin: 0; width: 100%; }
+.categories { display: flex; gap: 32px; overflow-x: auto; border-bottom: 1px solid var(--line); scrollbar-width: thin; }
+.categories a { display: flex; align-items: center; gap: 8px; white-space: nowrap; padding: 14px 0; min-height: 52px; color: var(--muted); font-size: 14px; font-weight: 650; border-bottom: 2px solid transparent; }
+.categories a[aria-current=page] { color: var(--blue); border-bottom-color: var(--blue); }
+.categories a:hover { color: var(--ink); }
+.categories a span { font-size: 12px; font-weight: 450; }
+.toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 20px 0; font-size: 14px; color: var(--muted); }
+.toolbar strong { color: var(--ink); }
+.toolbar>span { min-width: 0; overflow-wrap: anywhere; }
+.filterDisclosure { position: relative; flex-shrink: 0; }
+.filterDisclosure summary { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; border: 1px solid var(--border-strong); border-radius: var(--radius-control); padding: 8px 12px; background: var(--surface); color: var(--ink); font-weight: 600; list-style: none; }
+.filterDisclosure summary::-webkit-details-marker { display: none; }
+.filterDisclosure[open] summary { border-color: var(--blue); color: var(--blue); }
+.filterPanel { position: absolute; right: 0; top: calc(100% + 8px); width: min(340px,calc(100vw - 40px)); padding: 20px; z-index: 10; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-popover); }
+.filters { display: grid; gap: 16px; }
+.filters label { display: grid; gap: 6px; }
+.filters select { width: 100%; }
+.clearFilters { display: block; margin-top: 12px; color: var(--blue); text-align: center; padding: 8px; }
+.filterCount { background: var(--surface-blue); padding: 0 6px; border-radius: 4px; }
+@media(max-width:767px) {
+ .browse { padding-top: 20px; }
+ .heading { grid-template-columns: 1fr; gap: 16px; margin-bottom: 16px; }
+ .intro h1 { margin: 8px 0 4px; }
+ .intro p { font-size: 13px; }
+ .categories { gap: 24px; }
+ .toolbar { margin: 16px 0; }
+}

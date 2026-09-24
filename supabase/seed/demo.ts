@@ -1,54 +1,27 @@
-import type { Database, Entity } from '../../lib/types';
+import type { Database } from '../../lib/types';
+import { diningGalleryBySlug } from './dining-gallery';
+import { housingGalleryBySlug } from './housing-gallery';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const iso = (offset: number) => new Date(Date.now() + offset).toISOString();
+// Student/moderator/outsider IDs remain test fixtures only. The runtime login UI exposes only Duke and admin.
 export const demoIdentities = { admin: id(1), student: id(2), moderator: id(3), outsider: id(4), duke: id(11) };
 
 export function createSeed(empty = false): Database {
   const now=iso(-3_600_000);
-  const accountMeta={created_at:now,updated_at:now,last_sign_in_at:now,review_count:0,response_count:0,submission_count:0};
+  const accountMeta={is_demo_fixture:true,created_at:now,updated_at:now,last_sign_in_at:now,review_count:0,response_count:0,submission_count:0};
   const accounts: Database['accounts'] = [
-    { ...accountMeta,id:id(1), email:'admin@example.edu', nickname:'Campus Admin', role:'admin', suspended:false, verified:true },
-    { ...accountMeta,id:id(2), email:'student@example.edu', nickname:'Alex on campus', role:'user', suspended:false, verified:true },
-    { ...accountMeta,id:id(3), email:'moderator@example.edu', nickname:'Campus Moderator', role:'moderator', suspended:false, verified:true },
-    { ...accountMeta,id:id(4), email:'student@elsewhere.edu', nickname:'Visiting Student', role:'user', suspended:false, verified:true },
-    ...['Jamie','Taylor','Morgan','Riley','Sam','Casey'].map((nickname,i)=>({...accountMeta,id:id(5+i),email:`student${i}@example.edu`,nickname,role:'user' as const,suspended:false,verified:true})),
+    { ...accountMeta,id:id(1), email:'admin@duke.edu', nickname:'Campus Admin', role:'admin', suspended:false, verified:true },
+    { ...accountMeta,id:id(2), email:'student@duke.edu', nickname:'Test Student', role:'user', suspended:false, verified:true },
+    { ...accountMeta,id:id(3), email:'moderator@duke.edu', nickname:'Test Moderator', role:'moderator', suspended:false, verified:true },
+    { ...accountMeta,id:id(4), email:'student@elsewhere.edu', nickname:'Test Outsider', role:'user', suspended:false, verified:true },
     { ...accountMeta,id:id(11), email:'student@duke.edu', nickname:'Cameron Student', role:'user', suspended:false, verified:true },
     ...['Avery','Jordan','Skyler','Quinn','Devon','Reese','Parker','Drew'].map((nickname,i)=>({...accountMeta,id:id(12+i),email:`demo${i+1}@duke.edu`,nickname,role:'user' as const,suspended:false,verified:true})),
   ];
-  const db: Database = { schools:[], categories:[], entities:[], dimensions:[], accounts, reviews:[], values:[], reports:[], audit:[], limits:[], questions:[], question_options:[], question_responses:[], submissions:[],forum_editorial_identities:[],forum_posts:[],forum_post_images:[],forum_comments:[],forum_post_likes:[] };
+  const db: Database = { schools:[], categories:[], entities:[], dimensions:[], accounts, reviews:[], values:[], reports:[], audit:[], limits:[], questions:[], question_options:[], question_responses:[], submissions:[],managed_identities:[],forum_posts:[],forum_post_images:[],forum_comments:[],forum_post_likes:[] };
   if (empty) return db;
 
-  db.schools = [
-    {id:id(20),name:'Example University',slug:'example-university',email_domain:'example.edu',city:'Brookfield',state:'North Carolina',country:'United States',status:'active'},
-    {id:id(21),name:'Duke University',slug:'duke-university',email_domain:'duke.edu',city:'Durham',state:'North Carolina',country:'United States',status:'active'},
-  ];
-  db.categories = [
-    ['Dining','dining','Find your next favorite bite.','utensils'],
-    ['Study spaces','study-spaces','A little space to focus.','book'],
-    ['Housing','housing','Find a place to feel at home.','home'],
-    ['Campus life','campus-life','Make more of your time here.','sparkles'],
-  ].map(([name,slug,description,icon],i)=>({id:id(30+i),school_id:id(20),name,slug,description,icon,status:'active' as const,sort_order:i+1,is_discover_default:false,accepts_submissions:false}));
-  db.categories.push({id:id(34),school_id:id(20),name:'Community',slug:'community',description:'Student-submitted campus finds, reviewed before publication.',icon:'sparkles',status:'active',sort_order:0,is_discover_default:true,accepts_submissions:true});
-  const dimensionSets = [
-    [['taste','Taste'],['value','Meal Plan Value'],['service','Service']],
-    [['quietness','Quietness'],['comfort','Comfort'],['availability','Availability']],
-    [['comfort','Comfort'],['location','Location'],['facilities','Facilities']],
-    [['experience','Experience'],['accessibility','Accessibility'],['value','Value']],
-  ];
-  db.dimensions = dimensionSets.flatMap((dimensions,i)=>dimensions.map(([key,label],j)=>({id:id(50+i*3+j),category_id:id(30+i),key,label,description:'',min_value:1,max_value:10,sort_order:j,is_required:true,is_active:true})));
-  const resources = [
-    ['The Commons Kitchen','the-commons-kitchen',0,'Central Campus','Fresh lunches, familiar faces.','A bright campus gathering spot with rotating daily plates, warm sandwiches and plenty of room to catch up with friends.'],
-    ['North Reading Room','north-reading-room',1,'North Campus','For your next deep-focus session.','A quiet room with individual desks, generous natural light and power outlets close at hand.'],
-    ['Cedar Hall','cedar-hall',2,'West Campus','A comfortable place to land.','A residential community with shared kitchens, common lounges and easy access to the center of campus.'],
-    ['Student Garden','student-garden',3,'East Campus','Take a little breather.','An open-air space for a quiet break, a walk with friends or a few pages between classes.'],
-    ['Bluebird Café','bluebird-cafe',0,'Central Campus','Coffee and a good conversation.','A small café serving coffee, tea and light bites inside the campus commons.'],
-    ['The Workshop','the-workshop',1,'East Campus','Room for ideas to take shape.','A collaborative workspace with group tables, whiteboards and bookable project areas.'],
-  ];
-  db.entities = resources.map((r,i)=>({id:id(100+i),school_id:id(20),category_id:id(30+Number(r[2])),parent_entity_id:i===4?id(100):null,name:String(r[0]),slug:String(r[1]),short_description:String(r[4]),description:String(r[5]),location_name:String(r[3]),address:'',latitude:null,longitude:null,official_url:'',source_name:'Fictional demonstration record',source_url:'',last_verified_at:null,metadata:i===1?{amenities:['Power outlets','Individual desks'],environment:'Quiet study'}:i===2?{amenities:['Shared kitchen','Laundry','Lounge']}:{amenities:['Wi-Fi','Seating']},status:'active',is_featured:i<3,created_at:'2026-09-01T12:00:00Z'} as Entity));
-  const bodies = ['A solid go-to between classes. The space is welcoming and it is easy to find your way around.','One of my favorite spots on campus. A little busier in the afternoon, so plan ahead.','Really useful to have nearby. I have had a consistently good experience here.','Worth a visit! Comfortable, convenient and a nice change of pace.'];
-  db.entities.forEach((entity,i)=>{for(let j=0;j<4;j++){const reviewId=id(200+i*10+j);const score=[10,10,8,8][(i+j)%4];db.reviews.push({id:reviewId,entity_id:entity.id,user_id:id(5+j),overall_rating:score,body:bodies[(i+j)%4],is_anonymous:j%2===0,status:'published',created_at:`2026-09-${String(10+j).padStart(2,'0')}T12:00:00Z`,updated_at:'2026-09-14T12:00:00Z'});db.dimensions.filter(d=>d.category_id===entity.category_id).forEach((d,k)=>db.values.push({review_id:reviewId,rating_dimension_id:d.id,score:k===1?8:score}));}});
-
+  db.schools=[{id:id(21),name:'Duke University',slug:'duke-university',email_domain:'duke.edu',city:'Durham',state:'North Carolina',country:'United States',status:'active'}];
   seedDukeDiscover(db);
   seedPulse(db);
   seedForum(db);
@@ -148,10 +121,13 @@ function seedDukeDiscover(db:Database){
     ["Hollows B","hollows-b","housing","hollows-quad","Hollows Quad",false],
     ["Keohane ABD","keohane-abd","housing","keohane-quad","Keohane Quad",false],
     ["Keohane E","keohane-e","housing","keohane-quad","Keohane Quad",false],
+    ["300 Swift","300-swift","housing",null,"Swift Avenue",false],
   ] as const;
   listings.forEach(([name,slug,category,parent,location,featured],index)=>{
     const entityId=id(1000+index),categoryId=id(category==='dining'?35:36),parentIndex=parent?listings.findIndex(item=>item[1]===parent):-1;
-    db.entities.push({id:entityId,school_id:school,category_id:categoryId,parent_entity_id:parentIndex>=0?id(1000+parentIndex):null,name,slug,short_description:category==='dining'?'A Duke dining location.':'A Duke housing location.',description:category==='dining'?'A dining location in the Duke campus demo catalog.':'A residential location in the Duke campus demo catalog.',location_name:location,address:'',latitude:null,longitude:null,official_url:'',source_name:'Fictional demonstration record',source_url:'',last_verified_at:null,metadata:{amenities:category==='dining'?['Campus dining','Seating']:['Shared spaces','Campus access']},status:'active',is_featured:featured,created_at:'2026-09-01T12:00:00Z'});
+    db.entities.push({id:entityId,school_id:school,category_id:categoryId,parent_entity_id:parentIndex>=0?id(1000+parentIndex):null,name,slug,short_description:category==='dining'?'A Duke dining location.':'A Duke housing location.',description:category==='dining'?'A dining location in the Duke campus demo catalog.':'A residential location in the Duke campus demo catalog.',location_name:location,address:'',latitude:null,longitude:null,official_url:'',source_name:'Duke campus demo catalog',source_url:'',last_verified_at:null,metadata:{amenities:category==='dining'?['Campus dining','Seating']:['Shared spaces','Campus access']},status:'active',is_featured:featured,created_at:'2026-09-01T12:00:00Z'});
+    const gallery=diningGalleryBySlug[slug] ?? housingGalleryBySlug[slug];
+    if(gallery)db.entities[db.entities.length-1].metadata.gallery=gallery;
     const scores=[8,9,7,10];
     scores.forEach((score,reviewIndex)=>{const reviewId=id(2000+index*4+reviewIndex);db.reviews.push({id:reviewId,entity_id:entityId,user_id:id(12+reviewIndex),overall_rating:score,body:['Reliable between classes and easy to navigate.','A campus favorite with a consistently good experience.','Useful to have nearby, especially on a busy day.','One of the places I recommend to other students.'][reviewIndex],is_anonymous:reviewIndex%2===0,status:'published',created_at:`2026-09-${String(10+reviewIndex).padStart(2,'0')}T15:00:00Z`,updated_at:'2026-09-14T15:00:00Z'});db.dimensions.filter(d=>d.category_id===categoryId).forEach((dimension,dimensionIndex)=>db.values.push({review_id:reviewId,rating_dimension_id:dimension.id,score:Math.max(1,score-(dimensionIndex===2?1:0))}));});
   });
@@ -159,9 +135,9 @@ function seedDukeDiscover(db:Database){
 
 function seedForum(db:Database){
   const team=id(600),contributor=id(601),school=id(21);
-  db.forum_editorial_identities.push(
-    {id:team,name:'RATEDUKE Campus Team',seeded:true,created_at:iso(-30*86400000)},
-    {id:contributor,name:'Campus Contributor',seeded:true,created_at:iso(-30*86400000)}
+  db.managed_identities.push(
+    {id:team,school_id:school,name:'RATEDUKE Campus Team',status:'active',seeded:true,created_by:id(1),created_at:iso(-30*86400000),updated_at:iso(-30*86400000),review_count:0,post_count:0},
+    {id:contributor,school_id:school,name:'Campus Contributor',status:'active',seeded:true,created_by:id(1),created_at:iso(-30*86400000),updated_at:iso(-30*86400000),review_count:0,post_count:0}
   );
   const posts=[
     ['Perkins or Bostock? A quiet-seat field guide','A practical walk-through of the study environments students tend to look for: natural light, nearby outlets, conversation level, and how each floor feels at different points in a study session.',-3,[1,2,3]],
@@ -175,7 +151,7 @@ function seedForum(db:Database){
   ] as const;
   posts.forEach(([title,body,hours,images],index)=>{
     const postId=id(610+index);const created=iso(hours*3600000);const imageIds=images.map((_,imageIndex)=>id(700+index*4+imageIndex));
-    db.forum_posts.push({id:postId,school_id:school,author_user_id:null,editorial_identity_id:team,title,body,status:'published',cover_image_id:imageIds[0],created_at:created,updated_at:created,published_at:created,deleted_at:null});
+    db.forum_posts.push({id:postId,school_id:school,author_user_id:null,managed_identity_id:team,title,body,status:'published',cover_image_id:imageIds[0],created_at:created,updated_at:created,published_at:created,deleted_at:null});
     images.forEach((asset,imageIndex)=>db.forum_post_images.push({id:imageIds[imageIndex],post_id:postId,storage_path:null,bundled_path:`/forum-seed/${String(asset).padStart(2,'0')}.webp`,sort_order:imageIndex,width:imageIndex%2?1200:1000,height:imageIndex%2?1000:1320,status:'ready',created_at:created}));
   });
   const comments:[number,number|null,string,string,number][]=[
@@ -190,7 +166,7 @@ function seedForum(db:Database){
     [825,null,'Books + coffee + a short walk is my ideal reset. ☕','contributor',-60.2],[826,825,'Same — the route matters less than actually taking the break.','team',-59.8]
   ];
   const postFor=(n:number)=>n<804?611:n<806?610:n<809?611:n<813?612:n<816?613:n<820?614:n<823?615:n<825?616:617;
-  for(const [n,parent,body,who,hours] of comments){const created=iso(hours*3600000);db.forum_comments.push({id:id(n),post_id:id(postFor(n)),parent_comment_id:parent===null?null:id(parent),author_user_id:null,editorial_identity_id:who==='team'?team:contributor,body,status:'published',created_at:created,updated_at:created,deleted_at:null});}
+  for(const [n,parent,body,who,hours] of comments){const created=iso(hours*3600000);db.forum_comments.push({id:id(n),post_id:id(postFor(n)),parent_comment_id:parent===null?null:id(parent),author_user_id:null,managed_identity_id:who==='team'?team:contributor,body,status:'published',created_at:created,updated_at:created,deleted_at:null});}
 }
 
 function seedPulse(db: Database) {
@@ -216,12 +192,14 @@ function seedPulse(db: Database) {
 
 export function upgradeDemo(input: Partial<Database>): Database {
   const base=createSeed();
-  const db={...input,questions:input.questions||[],question_options:input.question_options||[],question_responses:input.question_responses||[],submissions:input.submissions||[],forum_editorial_identities:input.forum_editorial_identities||[],forum_posts:input.forum_posts||[],forum_post_images:input.forum_post_images||[],forum_comments:input.forum_comments||[],forum_post_likes:input.forum_post_likes||[]} as Database;
-  if(!db.schools?.length)return {...db,schools:[],categories:[],entities:[],dimensions:[],reviews:[],values:[],reports:[],audit:[],questions:[],question_options:[],question_responses:[],submissions:[],forum_editorial_identities:[],forum_posts:[],forum_post_images:[],forum_comments:[],forum_post_likes:[]};
+  const legacy=input as unknown as Database&{forum_editorial_identities?:{id:string;name:string;seeded:boolean;created_at:string}[]};
+  const db={...input,accounts:(input.accounts||[]).map(account=>({...account,is_demo_fixture:true})),questions:input.questions||[],question_options:input.question_options||[],question_responses:input.question_responses||[],submissions:input.submissions||[],managed_identities:input.managed_identities||legacy.forum_editorial_identities?.map(item=>({...item,school_id:id(21),status:'active' as const,created_by:id(1),updated_at:item.created_at,review_count:0,post_count:0}))||[],forum_posts:(input.forum_posts||[]).map(post=>({...post,managed_identity_id:post.managed_identity_id||(post as typeof post&{editorial_identity_id?:string|null}).editorial_identity_id||null})),forum_post_images:input.forum_post_images||[],forum_comments:(input.forum_comments||[]).map(comment=>({...comment,managed_identity_id:comment.managed_identity_id||(comment as typeof comment&{editorial_identity_id?:string|null}).editorial_identity_id||null})),forum_post_likes:input.forum_post_likes||[]} as Database;
+  if(!db.schools?.length)return {...db,schools:[],categories:[],entities:[],dimensions:[],reviews:[],values:[],reports:[],audit:[],questions:[],question_options:[],question_responses:[],submissions:[],managed_identities:[],forum_posts:[],forum_post_images:[],forum_comments:[],forum_post_likes:[]};
   const diningCategoryIds=new Set(db.categories.filter(category=>category.slug==='dining').map(category=>category.id));
   for(const dimension of db.dimensions)if(diningCategoryIds.has(dimension.category_id)&&dimension.key==='value')dimension.label='Meal Plan Value';
   const dukeId=id(21);const addUnique=<T extends {id?:string}>(target:T[],source:T[])=>{for(const item of source)if(!item.id||!target.some(x=>x.id===item.id))target.push(item);};
   addUnique(db.accounts,base.accounts.filter(a=>a.email.endsWith('@duke.edu')));
+  const admin=db.accounts.find(account=>account.id===demoIdentities.admin),freshAdmin=base.accounts.find(account=>account.id===demoIdentities.admin)!;if(admin)Object.assign(admin,freshAdmin);else db.accounts.push(freshAdmin);
   addUnique(db.schools,base.schools.filter(s=>s.id===dukeId));
   addUnique(db.categories,base.categories.filter(c=>c.school_id===dukeId));
   addUnique(db.dimensions,base.dimensions.filter(d=>base.categories.some(c=>c.id===d.category_id&&c.school_id===dukeId)));
@@ -233,7 +211,8 @@ export function upgradeDemo(input: Partial<Database>): Database {
   for(const source of base.reviews.filter(review=>entityIds.has(review.entity_id))){const review={...source,entity_id:entityIds.get(source.entity_id)!};if(!db.reviews.some(item=>item.id===review.id))db.reviews.push(review);}
   for(const value of base.values)if(!db.values.some(item=>item.review_id===value.review_id&&item.rating_dimension_id===value.rating_dimension_id))db.values.push(value);
   addUnique(db.questions,base.questions.filter(q=>q.school_id===dukeId));addUnique(db.question_options,base.question_options.filter(o=>base.questions.some(q=>q.id===o.question_id&&q.school_id===dukeId)));
-  addUnique(db.forum_editorial_identities,base.forum_editorial_identities);addUnique(db.forum_posts,base.forum_posts);addUnique(db.forum_post_images,base.forum_post_images);addUnique(db.forum_comments,base.forum_comments);
+  addUnique(db.managed_identities,base.managed_identities);addUnique(db.forum_posts,base.forum_posts);addUnique(db.forum_post_images,base.forum_post_images);addUnique(db.forum_comments,base.forum_comments);
+  const exampleSchoolIds=new Set(db.schools.filter(s=>s.slug==='example-university'||s.email_domain==='example.edu').map(s=>s.id));const exampleCategoryIds=new Set(db.categories.filter(c=>c.school_id&&exampleSchoolIds.has(c.school_id)).map(c=>c.id));const exampleEntityIds=new Set(db.entities.filter(e=>exampleSchoolIds.has(e.school_id)).map(e=>e.id));const exampleReviewIds=new Set(db.reviews.filter(r=>exampleEntityIds.has(r.entity_id)).map(r=>r.id));db.schools=db.schools.filter(s=>!exampleSchoolIds.has(s.id));db.categories=db.categories.filter(c=>!c.school_id||!exampleSchoolIds.has(c.school_id));db.dimensions=db.dimensions.filter(d=>!exampleCategoryIds.has(d.category_id));db.entities=db.entities.filter(e=>!exampleEntityIds.has(e.id));db.reviews=db.reviews.filter(r=>!exampleReviewIds.has(r.id));db.values=db.values.filter(v=>!exampleReviewIds.has(v.review_id));db.accounts=db.accounts.filter(a=>!a.email.endsWith('@example.edu')&&!a.email.endsWith('@elsewhere.edu'));
   for(const response of base.question_responses)if(!db.question_responses.some(r=>r.question_id===response.question_id&&r.user_id===response.user_id))db.question_responses.push(response);
   return db;
 }

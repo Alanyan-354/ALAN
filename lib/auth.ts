@@ -24,6 +24,7 @@ export function callbackFailureCode(error:AuthFailure|null|undefined){
 }
 
 export function callbackFailureMessage(code:string|undefined){
+  if(code==='admin_required')return 'This account does not have administrator access.';
   if(code==='browser')return 'Open the newest sign-in link in the same browser where you requested it.';
   if(code==='denied')return 'Sign-in was cancelled or denied. Request a new link below.';
   return 'Your link expired or could not be verified. Request a new link below.';
