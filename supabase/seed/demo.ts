@@ -18,23 +18,35 @@ export function createSeed(empty = false): Database {
     { ...accountMeta,id:id(11), email:'student@duke.edu', nickname:'Cameron Student', role:'user', suspended:false, verified:true },
     ...['Avery','Jordan','Skyler','Quinn','Devon','Reese','Parker','Drew'].map((nickname,i)=>({...accountMeta,id:id(12+i),email:`demo${i+1}@duke.edu`,nickname,role:'user' as const,suspended:false,verified:true})),
   ];
-  const db: Database = { schools:[], categories:[], entities:[], dimensions:[], accounts, reviews:[], values:[], reports:[], audit:[], limits:[], questions:[], question_options:[], question_responses:[], submissions:[],managed_identities:[],forum_posts:[],forum_post_images:[],forum_comments:[],forum_post_likes:[] };
+  const db: Database = { schools:[], categories:[], entities:[], entity_gallery_images:[], dimensions:[], accounts, reviews:[], values:[], reports:[], audit:[], limits:[], questions:[], question_options:[], question_responses:[], submissions:[],managed_identities:[],forum_posts:[],forum_post_images:[],forum_comments:[],forum_post_likes:[],tags:[],entity_tags:[],community_authors:[],community_comments:[],community_likes:[] };
   if (empty) return db;
 
   db.schools=[{id:id(21),name:'Duke University',slug:'duke-university',email_domain:'duke.edu',city:'Durham',state:'North Carolina',country:'United States',status:'active'}];
   seedDukeDiscover(db);
+  seedEntityGalleries(db);
   seedPulse(db);
   seedForum(db);
   return db;
 }
 
+function seedEntityGalleries(db:Database){let number=800;for(const entity of db.entities){const gallery=Array.isArray(entity.metadata.gallery)?entity.metadata.gallery:[];for(const [sortOrder,value] of gallery.entries()){if(!value||typeof value!=='object')continue;const image=value as Record<string,unknown>;if(typeof image.src!=='string'||typeof image.alt!=='string'||!['photo','graphic'].includes(String(image.kind)))continue;db.entity_gallery_images.push({id:id(number++),entity_id:entity.id,storage_path:null,source_url:image.src,sort_order:sortOrder,alt_text:image.alt,kind:image.kind as 'photo'|'graphic',width:null,height:null,status:'ready',created_by:id(1),created_at:iso(-30*86400000)});}}}
+
 function seedDukeDiscover(db:Database){
   const school=id(21);
   const categories=[
-    {id:id(35),school_id:school,name:'Dining',slug:'dining',description:'Dining halls, cafes and individual food stations.',icon:'utensils',status:'active' as const,sort_order:0,is_discover_default:true,accepts_submissions:false},
-    {id:id(36),school_id:school,name:'Housing',slug:'housing',description:'Residential campuses, quads, houses and buildings.',icon:'home',status:'active' as const,sort_order:1,is_discover_default:false,accepts_submissions:false},
+    {id:id(35),school_id:school,name:'Dining',slug:'dining',description:'Dining halls, cafes and individual food stations.',icon:'utensils',status:'active' as const,sort_order:1,is_discover_default:false,accepts_submissions:false},
+    {id:id(36),school_id:school,name:'Housing',slug:'housing',description:'Residential campuses, quads, houses and buildings.',icon:'home',status:'active' as const,sort_order:2,is_discover_default:false,accepts_submissions:false},
+    {id:id(37),school_id:school,name:'Community',slug:'community',description:'Student-created campus finds, ratings and conversations.',icon:'sparkles',status:'active' as const,sort_order:0,is_discover_default:true,accepts_submissions:true},
   ];
   db.categories.push(...categories);
+  const officialTags=[
+    ['dining','Dining','Specific dishes, food trucks, cafes, food quality and meal plans.'],
+    ['academic','Academic','Libraries, advising, tutoring, labs, academic resources and study spaces.'],
+    ['activities','Activities','Clubs, student organizations, campus events, sports and social activities.'],
+    ['facilities','Facilities','Gyms, academic buildings, makerspaces, transportation and campus infrastructure.'],
+    ['other','Other','Community finds that do not fit another official tag.'],
+  ] as const;
+  officialTags.forEach(([slug,label,description],index)=>db.tags.push({id:id(900+index),school_id:null,slug,label,description,kind:'official',status:'active',created_by:null,created_at:iso(-30*86400000),usage_count:0}));
   const dimensions=[
     [62,35,'taste','Taste','Quality and consistency of the food.'],[63,35,'value','Meal Plan Value','Value relative to price or meal-plan cost.'],[64,35,'wait-time','Wait time','How manageable the wait usually is.'],
     [65,36,'comfort','Comfort','Day-to-day comfort of the residence.'],[66,36,'location','Location','Convenience of the campus location.'],[67,36,'facilities','Facilities','Quality and usefulness of shared facilities.'],
@@ -193,8 +205,8 @@ function seedPulse(db: Database) {
 export function upgradeDemo(input: Partial<Database>): Database {
   const base=createSeed();
   const legacy=input as unknown as Database&{forum_editorial_identities?:{id:string;name:string;seeded:boolean;created_at:string}[]};
-  const db={...input,accounts:(input.accounts||[]).map(account=>({...account,is_demo_fixture:true})),questions:input.questions||[],question_options:input.question_options||[],question_responses:input.question_responses||[],submissions:input.submissions||[],managed_identities:input.managed_identities||legacy.forum_editorial_identities?.map(item=>({...item,school_id:id(21),status:'active' as const,created_by:id(1),updated_at:item.created_at,review_count:0,post_count:0}))||[],forum_posts:(input.forum_posts||[]).map(post=>({...post,managed_identity_id:post.managed_identity_id||(post as typeof post&{editorial_identity_id?:string|null}).editorial_identity_id||null})),forum_post_images:input.forum_post_images||[],forum_comments:(input.forum_comments||[]).map(comment=>({...comment,managed_identity_id:comment.managed_identity_id||(comment as typeof comment&{editorial_identity_id?:string|null}).editorial_identity_id||null})),forum_post_likes:input.forum_post_likes||[]} as Database;
-  if(!db.schools?.length)return {...db,schools:[],categories:[],entities:[],dimensions:[],reviews:[],values:[],reports:[],audit:[],questions:[],question_options:[],question_responses:[],submissions:[],managed_identities:[],forum_posts:[],forum_post_images:[],forum_comments:[],forum_post_likes:[]};
+  const db={...input,accounts:(input.accounts||[]).map(account=>({...account,is_demo_fixture:true})),entity_gallery_images:input.entity_gallery_images||[],questions:input.questions||[],question_options:input.question_options||[],question_responses:input.question_responses||[],submissions:input.submissions||[],managed_identities:input.managed_identities||legacy.forum_editorial_identities?.map(item=>({...item,school_id:id(21),status:'active' as const,created_by:id(1),updated_at:item.created_at,review_count:0,post_count:0}))||[],forum_posts:(input.forum_posts||[]).map(post=>({...post,managed_identity_id:post.managed_identity_id||(post as typeof post&{editorial_identity_id?:string|null}).editorial_identity_id||null})),forum_post_images:input.forum_post_images||[],forum_comments:(input.forum_comments||[]).map(comment=>({...comment,managed_identity_id:comment.managed_identity_id||(comment as typeof comment&{editorial_identity_id?:string|null}).editorial_identity_id||null})),forum_post_likes:input.forum_post_likes||[],tags:input.tags||[],entity_tags:input.entity_tags||[],community_authors:input.community_authors||[],community_comments:input.community_comments||[],community_likes:input.community_likes||[]} as Database;
+  if(!db.schools?.length)return {...db,schools:[],categories:[],entities:[],entity_gallery_images:[],dimensions:[],reviews:[],values:[],reports:[],audit:[],questions:[],question_options:[],question_responses:[],submissions:[],managed_identities:[],forum_posts:[],forum_post_images:[],forum_comments:[],forum_post_likes:[],tags:[],entity_tags:[],community_authors:[],community_comments:[],community_likes:[]};
   const diningCategoryIds=new Set(db.categories.filter(category=>category.slug==='dining').map(category=>category.id));
   for(const dimension of db.dimensions)if(diningCategoryIds.has(dimension.category_id)&&dimension.key==='value')dimension.label='Meal Plan Value';
   const dukeId=id(21);const addUnique=<T extends {id?:string}>(target:T[],source:T[])=>{for(const item of source)if(!item.id||!target.some(x=>x.id===item.id))target.push(item);};
@@ -206,12 +218,13 @@ export function upgradeDemo(input: Partial<Database>): Database {
   const dukeEntities=base.entities.filter(entity=>entity.school_id===dukeId),entityIds=new Map<string,string>();
   for(const source of dukeEntities){const existing=db.entities.find(entity=>entity.school_id===dukeId&&entity.slug===source.slug);if(existing){entityIds.set(source.id,existing.id);Object.assign(existing,{...source,id:existing.id,parent_entity_id:source.parent_entity_id});}else{db.entities.push({...source});entityIds.set(source.id,source.id);}}
   for(const source of dukeEntities){const target=db.entities.find(entity=>entity.id===entityIds.get(source.id));if(target)target.parent_entity_id=source.parent_entity_id?entityIds.get(source.parent_entity_id)||null:null;}
+  if(!db.entity_gallery_images.length)for(const source of base.entity_gallery_images){const mapped=entityIds.get(source.entity_id);if(mapped)db.entity_gallery_images.push({...source,entity_id:mapped});}
   const legacyReviewIds=new Set(Array.from({length:48},(_,index)=>id(300+index)));
   db.reviews=db.reviews.filter(review=>!legacyReviewIds.has(review.id));db.values=db.values.filter(value=>!legacyReviewIds.has(value.review_id));
   for(const source of base.reviews.filter(review=>entityIds.has(review.entity_id))){const review={...source,entity_id:entityIds.get(source.entity_id)!};if(!db.reviews.some(item=>item.id===review.id))db.reviews.push(review);}
   for(const value of base.values)if(!db.values.some(item=>item.review_id===value.review_id&&item.rating_dimension_id===value.rating_dimension_id))db.values.push(value);
   addUnique(db.questions,base.questions.filter(q=>q.school_id===dukeId));addUnique(db.question_options,base.question_options.filter(o=>base.questions.some(q=>q.id===o.question_id&&q.school_id===dukeId)));
-  addUnique(db.managed_identities,base.managed_identities);addUnique(db.forum_posts,base.forum_posts);addUnique(db.forum_post_images,base.forum_post_images);addUnique(db.forum_comments,base.forum_comments);
+  addUnique(db.managed_identities,base.managed_identities);addUnique(db.forum_posts,base.forum_posts);addUnique(db.forum_post_images,base.forum_post_images);addUnique(db.forum_comments,base.forum_comments);addUnique(db.tags,base.tags);
   const exampleSchoolIds=new Set(db.schools.filter(s=>s.slug==='example-university'||s.email_domain==='example.edu').map(s=>s.id));const exampleCategoryIds=new Set(db.categories.filter(c=>c.school_id&&exampleSchoolIds.has(c.school_id)).map(c=>c.id));const exampleEntityIds=new Set(db.entities.filter(e=>exampleSchoolIds.has(e.school_id)).map(e=>e.id));const exampleReviewIds=new Set(db.reviews.filter(r=>exampleEntityIds.has(r.entity_id)).map(r=>r.id));db.schools=db.schools.filter(s=>!exampleSchoolIds.has(s.id));db.categories=db.categories.filter(c=>!c.school_id||!exampleSchoolIds.has(c.school_id));db.dimensions=db.dimensions.filter(d=>!exampleCategoryIds.has(d.category_id));db.entities=db.entities.filter(e=>!exampleEntityIds.has(e.id));db.reviews=db.reviews.filter(r=>!exampleReviewIds.has(r.id));db.values=db.values.filter(v=>!exampleReviewIds.has(v.review_id));db.accounts=db.accounts.filter(a=>!a.email.endsWith('@example.edu')&&!a.email.endsWith('@elsewhere.edu'));
   for(const response of base.question_responses)if(!db.question_responses.some(r=>r.question_id===response.question_id&&r.user_id===response.user_id))db.question_responses.push(response);
   return db;

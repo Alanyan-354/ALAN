@@ -87,18 +87,24 @@ School 1 ── N Question 1 ── 2..4 QuestionOption
 - Predictions require close/event timestamps and may resolve to one option. Polls cannot be resolved predictions.
 - Open unanswered questions expose participation count but not option distribution. Distribution becomes visible to staff, the answering user, or after close/resolution.
 
-### 3.4 Community entity submissions
+### 3.4 Community publishing and conversation
 
 ```text
-Profile 1 ── N EntitySubmission ── 0..1 Entity
-                                  └── entity-images/{submission_id}/image.webp
+Profile/ManagedIdentity 1 ── N EntitySubmission ── 1 Entity ── tags
+                                      │                ├── one official primary tag
+                                      │                └── zero to five school custom tags
+                                      └── 1..5 private entity images
+Entity 1 ── N Review / CommunityComment ── N flat Reply
+                                      └── N unique CommunityLike
 ```
 
-- Lifecycle: `draft → pending → approved | rejected`; a rejected submission may be edited and resubmitted.
+- Uploads remain private drafts until all image slots are ready. Finalization immediately and transactionally creates the entity, tag links, public author byline, gallery, and publisher's first rating.
 - Only categories with `accepts_submissions = true` accept this workflow.
-- The browser upload is normalized to WebP before entering the private `entity-images` bucket.
-- Admin approval atomically creates the entity and the student's first review, then links `entity_submissions.entity_id`.
-- Owners see their non-draft submissions. Only admins receive the full moderation queue and internal author fields.
+- The browser normalizes one to five ordered images to WebP before they enter the private `entity-images` bucket; the first image is the cover.
+- Official tags are global protected configuration. Custom tags are normalized to lower-case slugs, deduplicated per school, and can be merged or archived by administrators.
+- Each real user or managed contributor has one rating slot per Community entity. Top-level comments are unlimited within rate limits. Replies always retain the original root, so the public conversation is visually one level deep.
+- Likes use one `(target_type, target_id, user_id)` record and may target ratings, comments, or replies. Hidden/deleted content is excluded from public counts and Hot ranking.
+- Public Community projections expose nicknames and engagement only; account IDs, emails, and administrator status remain private.
 
 ### 3.5 Forum
 
@@ -119,14 +125,14 @@ School 1 ── N ForumPost 1 ── 1..9 ForumPostImage
 
 ### 3.6 Moderation and operational data
 
-- `reports` is a polymorphic moderation queue for `review`, `entity`, `user`, `forum_post`, and `forum_comment`. Only one pending report is allowed per reporter/target pair.
+- `reports` is a polymorphic moderation queue for `review`, `entity`, `user`, `forum_post`, `forum_comment`, and `community_comment`. Only one pending report is allowed per reporter/target pair.
 - `target_author_user_id` denormalizes the internal author of forum content for staff workflows. `target_id` is intentionally polymorphic and therefore has no single foreign key.
 - `audit_log` records staff and admin mutations. The staff snapshot returns only the latest 100 entries.
 - `rate_limits` stores hourly counters per user and action. The write RPC enforces limits at the database boundary.
 
 ## 4. Table dictionary
 
-There are 20 application tables: 6 configuration/catalog tables in `public` and 14 identity/content/operations tables in `private`.
+Community adds two public configuration/relationship tables and four private content/upload tables to the original application schema.
 
 ### Public-schema tables
 
@@ -138,6 +144,8 @@ There are 20 application tables: 6 configuration/catalog tables in `public` and 
 | `rating_dimensions` | Configured score axes per category | Unique `(category_id, key)`; fixed 1–10 scale; required/active flags |
 | `questions` | Prediction or poll configuration | School-scoped; status/timestamp rules; optional resolved option |
 | `question_options` | Two to four configured choices | Unique label and order per question; composite identity supports safe option references |
+| `tags` | Official and school custom Community tags | Protected official slugs; school-scoped custom slug uniqueness; active/archived lifecycle |
+| `entity_tags` | Entity-to-tag relationship | Exactly one primary official tag and at most five custom tags per Community entity |
 
 ### Private-schema tables
 
@@ -157,6 +165,10 @@ There are 20 application tables: 6 configuration/catalog tables in `public` and 
 | `forum_post_images` | Ordered forum image metadata | One path source (`storage_path` XOR `bundled_path`); unique order per post |
 | `forum_comments` | Arbitrarily nested post discussion | Real XOR editorial author; same-post parent FK; deletion tombstones preserve descendants |
 | `forum_post_likes` | Unique user likes | PK `(post_id, user_id)` |
+| `community_entity_authors` | Public nickname source for a Community entity | Exactly one real user or managed contributor, never both |
+| `community_comments` | Top-level comments and flattened replies | Optional review root; reply-to attribution; deleted rows remain private for audit but are omitted from conversations |
+| `community_likes` | Rating/comment/reply likes | PK `(target_type, target_id, user_id)`; real accounts only |
+| `entity_submission_images` | Ordered Community gallery uploads | One to five ready private paths linked to the published entity |
 
 Supabase-managed `auth.users`, `storage.buckets`, and `storage.objects` are dependencies but are not application-owned tables.
 
@@ -164,7 +176,7 @@ Supabase-managed `auth.users`, `storage.buckets`, and `storage.objects` are depe
 
 ### 5.1 Main `Snapshot`
 
-`get_app_data()` and Demo `publicSnapshot()` produce the same logical contract:
+`get_app_data()` plus `get_community_data()` and Demo `publicSnapshot()` produce the same logical contract:
 
 | Field | Guest/user visibility | Staff/admin visibility |
 | --- | --- | --- |
@@ -176,6 +188,7 @@ Supabase-managed `auth.users`, `storage.buckets`, and `storage.objects` are depe
 | `questions` | Non-draft/non-archived with result redaction | Full configuration and results |
 | `accounts`, `reports`, `audit` | Empty | Staff-only; submissions remain admin-only |
 | `viewer` | Current private account projection or null | Current private account projection |
+| `tags`, `entity_tags`, `community_authors`, `community_comments` | Public identity-redacted Community data | Adds hidden content and management counts where authorized |
 
 Database-only `image_path` values are removed in `lib/repository.ts` and replaced with one-hour signed `image_url` values before components receive the snapshot.
 
@@ -198,6 +211,7 @@ These projections expose `author_name`, counts, permissions, and public content;
 | `get_forum_feed(...)` | School-scoped, max-50-row paginated feed |
 | `get_forum_post(id)` | Identity-redacted post detail |
 | `get_forum_comments(...)` | Paginated root or child comments |
+| `get_community_data()` | Tags, galleries, Community conversation, like state, and authorized admin statistics |
 
 ### 5.4 Write interfaces
 
@@ -205,7 +219,7 @@ These projections expose `author_name`, counts, permissions, and public content;
 | --- | --- |
 | `app_command(action, data)` | Validated transactional reviews, admin config, moderation, profile, and forum actions |
 | `answer_question(question, option)` | Eligible response upsert plus refreshed aggregate view |
-| `begin/finalize/cancel_entity_submission` | Submission record and image lifecycle |
+| `begin/mark/finalize/cancel_entity_submission` | One-to-five-image private draft and immediate atomic Community publication |
 | `begin/mark/finalize/cancel_forum_post` | Forum draft and multi-image lifecycle |
 | `bootstrap_admin(email)` | One-time trusted initialization; never callable by normal web roles |
 
@@ -219,7 +233,7 @@ Server actions call `lib/repository.ts`; components do not issue raw table write
 | Identity | HTTP-only `rateduke-demo-user` cookie | Supabase Auth cookie/session |
 | Business rules | `lib/domain.ts` | RLS-bound SQL RPCs |
 | Reads | `publicSnapshot()` | `get_app_data()` and forum RPCs |
-| Entity uploads | Not available | Private `entity-images` bucket |
+| Entity uploads | `.local/entity-images/` with a demo-only protected media route | Private `entity-images` bucket with signed URLs |
 | Forum uploads | `.local/forum-images/` | Private `forum-images` bucket |
 | Production | Explicitly rejected | Default and required |
 
@@ -233,7 +247,9 @@ Server actions call `lib/repository.ts`; components do not issue raw table write
 | Account role | `user`, `moderator`, `admin` plus independent `suspended` |
 | Review | `published`, `hidden` plus independent `deleted_at` tombstone |
 | Question | `draft`, `open`, `closed`, `resolved`, `archived` |
-| Submission | `draft`, `pending`, `approved`, `rejected` |
+| Submission | `draft`, `approved` for new Community publishing; legacy `pending`/`rejected` rows remain readable |
+| Community comment | `published`, `hidden`, `deleted` |
+| Tag | `active`, `archived` |
 | Forum post | `draft`, `published`, `hidden`, `deleted` |
 | Forum comment | `published`, `hidden`, `deleted` |
 | Report | `pending`, `resolved` |
@@ -273,3 +289,6 @@ When adding or changing persisted data:
 7. Add database-contract and domain tests for the new invariant.
 8. Run `npm test`, `npm run typecheck`, and `npm run build`.
 9. For a displayed configuration change, verify the value in the running Supabase-backed UI, not only in source or migration files.
+# Official entity galleries
+
+Administrators manage ordered entity images through `private.entity_gallery_images`. Existing metadata galleries are migrated into this table, while uploaded files remain private in the `entity-images` bucket and are rendered through short-lived signed URLs. The first ready image by `sort_order` is the entity cover. Admin-only RPCs reserve unique upload paths, finalize uploads, and atomically reorder, relabel, or remove gallery items; every published gallery change is audited.
