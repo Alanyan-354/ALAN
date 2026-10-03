@@ -2,6 +2,7 @@ begin;
 
 -- Managed projects can retain an explicit ACL entry even for the migration owner.
 do $$ begin execute format('grant usage, create on schema private to %I', current_user); end $$;
+grant create on schema public, private to rateduke_api;
 
 alter table private.reports drop constraint if exists reports_target_type_check;
 alter table private.reports add constraint reports_target_type_check check(target_type in ('review','entity','user','forum_post','forum_comment'));
@@ -221,5 +222,7 @@ do $$ begin if to_regclass('storage.buckets') is not null and to_regclass('stora
  execute $sql$create policy rateduke_forum_images_insert on storage.objects for insert to authenticated with check(bucket_id='forum-images' and public.can_write_forum_image(name))$sql$;
  execute $sql$create policy rateduke_forum_images_delete on storage.objects for delete to authenticated using(bucket_id='forum-images' and public.can_write_forum_image(name))$sql$;
 end if;end $$;
+
+revoke create on schema public, private from rateduke_api;
 
 commit;
