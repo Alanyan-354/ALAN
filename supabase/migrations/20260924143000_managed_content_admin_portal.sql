@@ -2,6 +2,7 @@ begin;
 
 -- Managed projects can retain an explicit ACL entry even for the migration owner.
 do $$ begin execute format('grant usage, create on schema private to %I', current_user); end $$;
+grant create on schema public, private to rateduke_api;
 
 -- Generalize the existing editorial bylines without breaking seeded forum history.
 alter table private.forum_editorial_identities add column if not exists school_id uuid references public.schools(id);
@@ -107,5 +108,7 @@ $$;
 
 alter function public.app_command(text,jsonb) owner to rateduke_api;alter function public.begin_forum_post(jsonb) owner to rateduke_api;alter function public.mark_forum_image_ready(uuid,integer,integer) owner to rateduke_api;alter function public.finalize_forum_post(uuid) owner to rateduke_api;alter function public.get_forum_draft_paths(uuid) owner to rateduke_api;alter function public.cancel_forum_post(uuid) owner to rateduke_api;alter function public.can_write_forum_image(text) owner to rateduke_api;alter function public.get_app_data() owner to rateduke_api;
 revoke all on function public.app_command_before_managed_content(text,jsonb),public.app_command(text,jsonb) from public,anon,authenticated;grant execute on function public.app_command_before_managed_content(text,jsonb) to rateduke_api;grant execute on function public.app_command(text,jsonb) to authenticated;
+
+revoke create on schema public, private from rateduke_api;
 
 commit;

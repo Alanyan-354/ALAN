@@ -2,6 +2,7 @@ begin;
 
 -- Managed projects can retain an explicit ACL entry even for the migration owner.
 do $$ begin execute format('grant usage, create on schema private to %I', current_user); end $$;
+grant create on schema public, private to rateduke_api;
 
 create table private.entity_gallery_images (
   id uuid primary key default gen_random_uuid(),
@@ -124,5 +125,7 @@ do $$begin if to_regclass('storage.objects') is not null then
   execute 'drop policy if exists rateduke_submission_images_delete on storage.objects';
   execute $p$create policy rateduke_submission_images_delete on storage.objects for delete to authenticated using(bucket_id='entity-images' and (public.can_write_submission_image(name) or public.can_write_entity_gallery_image(name)))$p$;
 end if;end$$;
+
+revoke create on schema public, private from rateduke_api;
 
 commit;
