@@ -1,5 +1,8 @@
 begin;
 
+-- Managed projects can retain an explicit ACL entry even for the migration owner.
+do $$ begin execute format('grant usage, create on schema private to %I', current_user); end $$;
+
 alter table private.reports drop constraint if exists reports_target_type_check;
 alter table private.reports add constraint reports_target_type_check check(target_type in ('review','entity','user','forum_post','forum_comment'));
 alter table private.reports add column if not exists target_author_user_id uuid references private.profiles(id) on delete set null;
