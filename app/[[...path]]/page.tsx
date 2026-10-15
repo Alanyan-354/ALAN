@@ -10,6 +10,7 @@ import { AdminPage } from '@/components/admin-page';
 import { PulsePage } from '@/components/pulse-page';
 import { SubmissionPage } from '@/components/submission-page';
 import { ForumFeed } from '@/components/forum-feed';
+import { ForumAuthBoundary } from '@/components/forum-interactions';
 import { ForumPostPage } from '@/components/forum-post-page';
 import { ForumNewPage } from '@/components/forum-new-page';
 import type { ForumSort } from '@/lib/types';
@@ -27,7 +28,7 @@ export default async function Page({params,searchParams}:{params:Promise<{path?:
  else if(path[0]==='pulse'&&path.length<=2){const pulseMode=path[1]==='student-stats'?'poll':path[1]===undefined||path[1]==='predictions'?'prediction':null;if(!pulseMode)notFound();content=<PulsePage snapshot={snapshot} school={school} mode={pulseMode} questionId={query.question}/>;}
  else if(path[0]==='forum'&&path.length===1){const sort:ForumSort=query.sort==='latest'?'latest':'hot';content=<ForumFeed snapshot={snapshot} school={school} sort={sort} page={school?await getForumFeed(school.id,sort,Number(query.page||1),20):{items:[],page:1,page_size:20,has_more:false}}/>;}
  else if(path[0]==='forum'&&path[1]==='new'&&path.length===2){if(!school)notFound();content=<ForumNewPage snapshot={snapshot} school={school}/>;}
- else if(path[0]==='forum'&&path[1]==='post'&&path.length===3){const post=await getForumPost(path[2]);if(!post)notFound();school=snapshot.schools.find(item=>item.id===post.school_id);if(!school)notFound();content=<ForumPostPage post={post} school={school} comments={await getForumComments(post.id,null,Number(query.comments||1),20)}/>;}
+ else if(path[0]==='forum'&&path[1]==='post'&&path.length===3){const post=await getForumPost(path[2]);if(!post)notFound();school=snapshot.schools.find(item=>item.id===post.school_id);if(!school)notFound();content=<ForumAuthBoundary signedIn={!!snapshot.viewer}><ForumPostPage post={post} school={school} comments={await getForumComments(post.id,null,Number(query.comments||1),20)}/></ForumAuthBoundary>;}
  else if(['login','profile'].includes(path[0])&&path.length===1)content=<AccountPage snapshot={snapshot} mode={mode} page={path[0]} query={query}/>;
  else if(path[0]==='submit'&&path.length===1)content=<SubmissionPage snapshot={snapshot} school={school} edit={query.edit}/>;
  else if(path[0]==='admin'&&path.length<=2)content=<AdminPage snapshot={snapshot} section={path[1]||'overview'} query={query}/>;

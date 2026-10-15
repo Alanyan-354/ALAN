@@ -8,7 +8,7 @@ export const forumPostInput=z.object({
   images:z.array(z.object({width:z.number().int().min(1).max(12000),height:z.number().int().min(1).max(12000)})).min(1).max(9),
   cover_index:z.number().int().min(0).max(8)
 }).refine(value=>value.cover_index<value.images.length,{message:'Choose a cover image from this post.',path:['cover_index']});
-export const forumCommentInput=z.object({post_id:z.uuid(),parent_comment_id:z.uuid().nullable().default(null),body:z.string().trim().min(1).max(1500)});
+export const forumCommentInput=z.object({post_id:z.uuid(),parent_comment_id:z.uuid().nullable().default(null),reply_to_comment_id:z.uuid().nullable().default(null),body:z.string().trim().min(1).max(1500)});
 
 export function forumHotScore(likes:number,comments:number,createdAt:string,now=Date.now()){
   const ageHours=Math.max(0,(now-Date.parse(createdAt))/3_600_000);
@@ -39,8 +39,9 @@ export function getForumCommentsFromDb(db:Database,viewer:Account|null,postId:st
   const safePage=Math.max(1,Math.floor(page)||1),safeSize=Math.min(50,Math.max(1,Math.floor(pageSize)||20));const staff=!!viewer&&!viewer.suspended&&viewer.role!=='user';
   const rows=db.forum_comments.filter(item=>item.post_id===postId&&item.parent_comment_id===parentId).sort((a,b)=>parentId?a.created_at.localeCompare(b.created_at)||a.id.localeCompare(b.id):b.created_at.localeCompare(a.created_at)||b.id.localeCompare(a.id));
   const start=(safePage-1)*safeSize;const items=rows.slice(start,start+safeSize).map(item=>{
-    const parent=item.parent_comment_id?db.forum_comments.find(comment=>comment.id===item.parent_comment_id):null;
-    return {id:item.id,post_id:item.post_id,parent_comment_id:item.parent_comment_id,author_name:author(db,item.author_user_id,item.managed_identity_id),body:item.status==='published'?item.body:item.status==='hidden'?'This comment was hidden by the moderation team.':'This comment was deleted by its author.',status:item.status,created_at:item.created_at,reply_count:db.forum_comments.filter(comment=>comment.parent_comment_id===item.id).length,can_delete:!!viewer&&(item.author_user_id===viewer.id||staff),replying_to:parent?author(db,parent.author_user_id,parent.managed_identity_id):null};
+    const replyTargetId=item.reply_to_comment_id||item.parent_comment_id;
+    const replyTarget=replyTargetId?db.forum_comments.find(comment=>comment.id===replyTargetId):null;
+    return {id:item.id,post_id:item.post_id,parent_comment_id:item.parent_comment_id,reply_to_comment_id:item.reply_to_comment_id||null,author_name:author(db,item.author_user_id,item.managed_identity_id),body:item.status==='published'?item.body:item.status==='hidden'?'This comment was hidden by the moderation team.':'This comment was deleted by its author.',status:item.status,created_at:item.created_at,like_count:db.forum_comment_likes.filter(like=>like.comment_id===item.id).length,liked_by_viewer:db.forum_comment_likes.some(like=>like.comment_id===item.id&&like.user_id===viewer?.id),reply_count:parentId?0:db.forum_comments.filter(comment=>comment.parent_comment_id===item.id).length,can_delete:!!viewer&&(item.author_user_id===viewer.id||staff),replying_to:replyTarget?author(db,replyTarget.author_user_id,replyTarget.managed_identity_id):null};
   });
   return {items,page:safePage,page_size:safeSize,has_more:rows.length>start+safeSize};
 }

@@ -121,6 +121,17 @@ export function applyCommand(db:Database, user:Account|null, command:Command, no
     const id=uuid.parse(data.id); const review=db.reviews.find(r=>r.id===id && r.user_id===user.id && !r.deleted_at);if(!review)throw new Error('Review not found.');
     Object.assign(review,{deleted_at:timestamp,body:'',overall_rating:null});db.values=db.values.filter(v=>v.review_id!==id);return 'Review deleted.';
   }
+  if(action==='forum_toggle_comment_like'){
+    const comment=db.forum_comments.find(c=>c.id===uuid.parse(data.id)&&c.status==='published');
+    const post=comment&&db.forum_posts.find(p=>p.id===comment.post_id&&p.status==='published');
+    if(!comment||!post)throw new Error('Comment not found.');
+    if(!canContribute(db,user,post.school_id))throw new Error('Use a verified email from this school to like comments.');
+    limit('forum_comment_like',120);
+    const index=db.forum_comment_likes.findIndex(like=>like.comment_id===comment.id&&like.user_id===user.id);
+    if(index>=0)db.forum_comment_likes.splice(index,1);
+    else db.forum_comment_likes.push({comment_id:comment.id,user_id:user.id,created_at:timestamp});
+    return JSON.stringify({liked:index<0,count:db.forum_comment_likes.filter(like=>like.comment_id===comment.id).length});
+  }
   if(action==='forum_toggle_like'){
     const post=db.forum_posts.find(p=>p.id===uuid.parse(data.id)&&p.status==='published');if(!post)throw new Error('Post not found.');
     if(!canContribute(db,user,post.school_id))throw new Error('Use a verified email from this school to like posts.');limit('forum_like',120);
@@ -130,8 +141,13 @@ export function applyCommand(db:Database, user:Account|null, command:Command, no
   if(action==='forum_comment'){
     const post=db.forum_posts.find(p=>p.id===uuid.parse(data.post_id)&&p.status==='published');if(!post)throw new Error('Post not found.');
     if(!canContribute(db,user,post.school_id))throw new Error('Use a verified email from this school to comment.');limit('forum_comment',30);
-    const parentId=data.parent_comment_id?uuid.parse(data.parent_comment_id):null;if(parentId&&!db.forum_comments.some(c=>c.id===parentId&&c.post_id===post.id))throw new Error('Replies must stay within the same post.');
-    const body=text(1500).min(1).parse(data.body);const id=newId();db.forum_comments.push({id,post_id:post.id,parent_comment_id:parentId,author_user_id:user.id,managed_identity_id:null,body,status:'published',created_at:timestamp,updated_at:timestamp,deleted_at:null});return id;
+    const parentId=data.parent_comment_id?uuid.parse(data.parent_comment_id):null;const requestedTargetId=data.reply_to_comment_id?uuid.parse(data.reply_to_comment_id):parentId;
+    const target=requestedTargetId?db.forum_comments.find(c=>c.id===requestedTargetId&&c.post_id===post.id&&c.status==='published'):null;
+    if(requestedTargetId&&!target)throw new Error('Replies must target a published comment in the same post.');
+    const rootId=target?(target.parent_comment_id||target.id):null;
+    if(parentId&&rootId!==parentId&&requestedTargetId!==parentId)throw new Error('Replies must stay in the same conversation.');
+    if(!parentId&&requestedTargetId)throw new Error('A reply needs an original comment.');
+    const body=text(1500).min(1).parse(data.body);const id=newId();db.forum_comments.push({id,post_id:post.id,parent_comment_id:rootId,reply_to_comment_id:target?.id||null,author_user_id:user.id,managed_identity_id:null,body,status:'published',created_at:timestamp,updated_at:timestamp,deleted_at:null});return id;
   }
   if(action==='forum_delete_comment'){
     const comment=db.forum_comments.find(c=>c.id===uuid.parse(data.id));if(!comment)throw new Error('Comment not found.');if(comment.author_user_id!==user.id&&user.role==='user')throw new Error('You can delete only your own comments.');

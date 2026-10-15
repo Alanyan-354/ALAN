@@ -5,6 +5,7 @@ import { demoSnapshot, demoCommand, demoAnswer,demoForumFeed,demoForumPost,demoF
 import { supabase } from './supabase';
 import type { AdminEntityImage, Command, CommunityAuthor, CommunityCommentNode, EntitySubmission, EntityTag, ForumCommentNode, ForumPage, ForumPostCard, ForumPostDetail, ForumSort, QuestionView, Snapshot, Tag } from './types';
 import { validateCommand } from './domain';
+import { forumCommentInput } from './forum-domain';
 type RawImageRecord={image_path?:string|null};
 type RawSnapshot=Omit<Snapshot,'entities'|'own_submissions'|'admin_submissions'>&{
   entities:(Snapshot['entities'][number]&RawImageRecord)[];
@@ -27,8 +28,17 @@ export const getSnapshot=cache(async():Promise<Snapshot>=>{
 });
 export async function execute(command:Command){
   command=validateCommand(command);
+  if(command.action==='forum_comment')command={action:command.action,data:forumCommentInput.parse(command.data)};
   if(dataMode()==='demo')return demoCommand((await cookies()).get('rateduke-demo-user')?.value||null,command);
-  const client=await supabase();const {data,error}=await client.rpc('app_command',{p_action:command.action,p_data:command.data});if(error)throw new Error(error.message);return String(data);
+  const client=await supabase();
+  if(command.action==='forum_toggle_comment_like'){
+    const {data,error}=await client.rpc('toggle_forum_comment_like',{p_comment:command.data.id});if(error)throw new Error(error.message);return JSON.stringify(data);
+  }
+  if(command.action==='forum_comment'){
+    const forumData=forumCommentInput.parse(command.data);
+    const {data,error}=await client.rpc('create_forum_comment',{p_post:forumData.post_id,p_parent:forumData.parent_comment_id,p_reply_to:forumData.reply_to_comment_id,p_body:forumData.body});if(error)throw new Error(error.message);return String(data);
+  }
+  const {data,error}=await client.rpc('app_command',{p_action:command.action,p_data:command.data});if(error)throw new Error(error.message);return String(data);
 }
 export async function answerQuestion(questionId:string,optionId:string):Promise<QuestionView>{
   if(dataMode()==='demo')return demoAnswer((await cookies()).get('rateduke-demo-user')?.value||null,questionId,optionId);
